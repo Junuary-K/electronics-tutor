@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MOS Capacitor 밴드 다이어그램 · C-V</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#161b22; --line:#2a323d; --txt:#e6edf3;
+    --dim:#9aa7b4; --acc:#58a6ff; --warn:#f0883e; --ok:#3fb950; --red:#f85149;
+    --ec:#58a6ff; --ev:#bc8cff; --ef:#f0883e; --ei:#8b949e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+       padding:18px 16px 40px;-webkit-text-size-adjust:100%}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+  .ctrls{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+  label{display:block;font-size:12px;color:var(--dim);margin-bottom:5px}
+  input[type=range]{width:100%;accent-color:var(--acc);height:26px}
+  select{width:100%;padding:7px 8px;border-radius:8px;border:1px solid var(--line);
+         background:var(--bg);color:var(--txt);font-size:14px}
+  .val{font-variant-numeric:tabular-nums;font-size:13px;margin-top:2px}
+  .vals{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px}
+  .v{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+  .v .k{font-size:11px;color:var(--dim)}
+  .v .n{font-size:16px;font-variant-numeric:tabular-nums;margin-top:2px}
+  .v .u{font-size:11px;color:var(--dim)}
+  .regime{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .pill{font-size:15px;font-weight:700;padding:6px 14px;border-radius:999px;border:1px solid}
+  .pill.acc{color:#58a6ff;border-color:#58a6ff}
+  .pill.flat{color:#3fb950;border-color:#3fb950}
+  .pill.dep{color:#f0883e;border-color:#f0883e}
+  .pill.winv{color:#d29922;border-color:#d29922}
+  .pill.sinv{color:#f85149;border-color:#f85149}
+  .hidden-num{filter:blur(7px)}
+  svg{width:100%;max-width:980px;height:auto;display:block;border-radius:8px;background:var(--bg);margin:0 auto}
+  .chk{font-size:12.5px;display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .chk:last-child{border-bottom:0}
+  .ok{color:var(--ok)} .bad{color:var(--warn)}
+  .note{font-size:12.5px;color:var(--dim);margin-top:10px}
+  .note b{color:var(--txt)}
+  button{font:inherit;font-size:12.5px;padding:6px 12px;border-radius:8px;
+         border:1px solid var(--acc);background:transparent;color:var(--acc);cursor:pointer}
+</style>
+</head>
+<body>
+
+<h1>MOS Capacitor · p-Si / SiO₂ / 게이트</h1>
+<div class="sub">축적 · 평탄 · 공핍 · 반전을 한 화면에서 · 밴드 다이어그램과 C-V 동시 표시</div>
+
+<div class="card">
+  <div class="ctrls">
+    <div>
+      <label for="gate">게이트</label>
+      <select id="gate">
+        <option value="4.05" selected>n⁺ poly-Si · 4.05 V</option>
+        <option value="5.15">p⁺ poly-Si · 5.15 V</option>
+        <option value="4.28">Al · 4.28 V</option>
+        <option value="5.10">Au · 5.10 V</option>
+      </select>
+    </div>
+    <div>
+      <label for="na">기판 도핑 Na (p형)</label>
+      <input id="na" type="range" min="14" max="18" step="0.02" value="16">
+      <div class="val" id="nav"></div>
+    </div>
+    <div>
+      <label for="tox">산화막 두께 t_ox</label>
+      <input id="tox" type="range" min="2" max="60" step="0.5" value="10">
+      <div class="val" id="toxv"></div>
+    </div>
+    <div>
+      <label for="vg">게이트 전압 V_G</label>
+      <input id="vg" type="range" min="-3" max="5" step="0.01" value="-0.5">
+      <div class="val" id="vgv"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="regime">
+    <button id="hideBtn">영역명 가리기</button>
+    <span id="regimePill" class="pill flat">—</span>
+    <span id="regimeWhy" class="note" style="margin:0"></span>
+  </div>
+  <div class="vals" id="vals"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">반도체 밴드 다이어그램 (표면 기준 실제 거리)</div>
+  <div id="bandPanel"></div>
+  <div class="note" id="bandNote"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">저주파 C-V 곡선</div>
+  <div id="cvPanel"></div>
+  <div class="note">
+    포인트를 <b>V_G</b>로 옮기면 곡선 위 위치가 바뀝니다. 점선은 이론 최소 커패시턴스 C_min.
+    <b>이 곡선은 저주파(준정적) C-V</b>입니다. 강반전에서 C가 다시 C_ox 쪽으로 올라가는 모양이 그 특징이고,
+    고주파에서는 강반전 구간이 C_min에 머뭅니다.
+  </div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">게이트–산화막 연결 (개략 · 산화막 폭 확대)</div>
+  <div id="stackPanel"></div>
+  <div class="note">산화막 두께는 수 nm인데 반도체 공핍층은 수백 nm라, 같은 축에 그리면 산화막이 사라집니다.
+    그래서 폭은 개략으로 그리고 <b>에너지 축만 실제 값</b>으로 그렸습니다.</div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">일관성 자동 검사</div>
+  <div id="checks"></div>
+</div>
+
+<script>
+const q=1.602176634e-19, kB=1.380649e-23, T=300;
+const Vt=kB*T/q, eps0=8.8541878128e-14;
+const epsS=11.7*eps0, epsOX=3.9*eps0;
+const ni=1.5e10, Eg=1.12, chi=4.01, dEcOx=3.10;
+
+const $=id=>document.getElementById(id);
+const fmt=(v,d)=>{ d=(d===undefined)?3:d;
+  return v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); };
+const SUPS={'-':'\u207B','0':'\u2070','1':'\u00B9','2':'\u00B2','3':'\u00B3','4':'\u2074',
+            '5':'\u2075','6':'\u2076','7':'\u2077','8':'\u2078','9':'\u2079'};
+const sup=n=>String(n).split('').map(c=>SUPS[c]||c).join('');
+const sci=v=>{ if(v===0) return '0';
+  const e=Math.floor(Math.log10(Math.abs(v)));
+  return (v/Math.pow(10,e)).toFixed(3)+'\u00D710'+sup(e); };
+
+function build(Na,tox,phiM,show){
+  const phiF=Vt*Math.log(Na/ni);
+  const Cox=epsOX/tox;
+  const phi_ms=phiM-(chi+Eg/2+phiF);
+  const VFB=phi_ms;
+  const LD=Math.sqrt(epsS*Vt/(q*Na));
+  const p0=Na, n0=ni*ni/Na;
+  const F=u=>{ const v=Math.exp(-u)+u-1+(n0/p0)*(Math.exp(u)-u-1); return v>0?Math.sqrt(v):0; };
+  const Efield=psi=>Math.SQRT2*Vt/LD*F(psi/Vt);
+  const Qs=psi=>psi===0?0:-Math.sign(psi)*epsS*Efield(psi);
+  const VGof=psi=>VFB+psi-Qs(psi)/Cox;
+  const solve=(VG)=>{ let lo=-1.2,hi=2.2;
+    for(let i=0;i<160;i++){ const m=(lo+hi)/2; if(VGof(m)<VG) lo=m; else hi=m; }
+    return (lo+hi)/2; };
+  const capOf=psi=>{ const h=1e-6;
+    const Cs=Math.abs(Qs(psi+h)-Qs(psi-h))/(2*h);
+    return 1/(1/Cox+1/Cs); };
+  const WT=Math.sqrt(2*epsS*(2*phiF)/(q*Na));
+  const Cmin=1/(1/Cox+WT/epsS);
+  const VT=VFB+2*phiF+Math.sqrt(2*epsS*q*Na*2*phiF)/Cox;
+  return {phiF,Cox,phi_ms,VFB,LD,F,Efield,Qs,VGof,solve,capOf,WT,Cmin,VT,Na,tox};
+}
+
+/* ---------- 반도체 밴드 다이어그램 ---------- */
+function drawBand(m,psi){
+  const W=940,H=400,padL=64,padR=104,padT=42,padB=64;
+  const plotW=W-padL-padR, plotH=H-padT-padB;
+  const EcB=Eg/2+m.phiF;
+
+  // 표면에서 안쪽으로 psi(x) 적분
+  const pts=[]; const sgn=Math.sign(psi)||1; const absS=Math.abs(psi);
+  if(absS>1e-6){
+    const floor=Math.max(absS*0.015,1e-5);
+    const N=400; let x=0;
+    pts.push({x:0,p:psi});
+    let prev=absS;
+    for(let i=1;i<=N;i++){
+      const a=absS*(1-i/N)+floor*(i/N);
+      const E=m.Efield(a*Math.sign(psi));
+      if(E<=0) break;
+      const dp=prev-a;
+      x+=dp/E;                 // cm
+      prev=a;
+      pts.push({x:x*1e7,p:a*Math.sign(psi)}); // nm
+    }
+  } else { pts.push({x:0,p:0},{x:1,p:0}); }
+
+  const xEnd=Math.max(pts[pts.length-1].x, 1);
+  const xmax=xEnd*1.06;
+
+  // 에너지 범위
+  let eLo=Infinity,eHi=-Infinity;
+  pts.forEach(o=>{ const ec=EcB-o.p; eLo=Math.min(eLo,ec-Eg); eHi=Math.max(eHi,ec); });
+  eLo=Math.min(eLo,-0.6); eHi=Math.max(eHi,EcB);
+  const pad=(eHi-eLo)*0.12; eLo-=pad*0.5; eHi+=pad;
+
+  const X=x=>padL+x/xmax*plotW;
+  const Y=e=>padT+(eHi-e)/(eHi-eLo)*plotH;
+
+  const T=(x,y,t,c,s,a,w)=>'<text x="'+x+'" y="'+y+'" fill="'+c+'" font-size="'+(s||11)+
+    '" font-weight="'+(w||400)+'" text-anchor="'+(a||'start')+'">'+t+'</text>';
+
+  let s='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MOS 밴드 다이어그램">';
+  s+='<rect x="'+padL+'" y="'+padT+'" width="'+plotW+'" height="'+plotH+'" fill="none" stroke="var(--line)"/>';
+
+  // 밴드갭 음영
+  const top=pts.map(o=>X(o.x)+','+Y(EcB-o.p)).join(' ');
+  const bot=pts.slice().reverse().map(o=>X(o.x)+','+Y(EcB-o.p-Eg)).join(' ');
+  s+='<polygon points="'+top+' '+bot+'" fill="var(--ec)" opacity="0.07"/>';
+
+  // E_c / E_v / E_i
+  const line=(key,col,w,dash)=>{
+    const pp=pts.map(o=>X(o.x)+','+Y(EcB-o.p-(key==='v'?Eg:key==='i'?Eg/2:0))).join(' ');
+    s+='<polyline points="'+pp+' '+(padL+plotW)+','+Y(EcB-0-(key==='v'?Eg:key==='i'?Eg/2:0))+
+       '" fill="none" stroke="'+col+'" stroke-width="'+w+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+'/>';
+  };
+  line('c','var(--ec)',2.4);
+  line('v','var(--ev)',2.4);
+  line('i','var(--ei)',1.3,'3 3');
+
+  // E_F
+  s+='<line x1="'+padL+'" y1="'+Y(0)+'" x2="'+(padL+plotW)+'" y2="'+Y(0)+'" stroke="var(--ef)" stroke-width="1.8"/>';
+  s+=T(padL+plotW+8,Y(0)+4,'E_F','var(--ef)',11.5,'start',600);
+
+  // 라벨
+  const lab=(x,y,t,c)=>'<rect x="'+(x-3)+'" y="'+(y-12)+'" width="'+(t.length*7+6)+'" height="16" fill="var(--bg)" opacity="0.85" rx="3"/>'+
+    T(x,y,t,c,11.5,'start',600);
+  s+=lab(padL+6,Y(EcB-psi),'E_c','var(--ec)');
+  s+=lab(padL+6,Y(EcB-psi-Eg),'E_v','var(--ev)');
+  s+=lab(padL+plotW-46,Y(EcB-Eg/2)-6,'E_i','var(--ei)');
+
+  // 표면 전위 표시
+  if(Math.abs(psi)>0.005){
+    const xb=padL+16;
+    s+='<line x1="'+xb+'" y1="'+Y(EcB)+'" x2="'+xb+'" y2="'+Y(EcB-psi)+'" stroke="var(--txt)" stroke-width="1.2" opacity="0.85"/>';
+    s+=T(xb+6,(Y(EcB)+Y(EcB-psi))/2+4,(psi>=0?'ψ_s = +':'ψ_s = ')+fmt(psi,3)+' V','var(--txt)',11,'start',600);
+  }
+
+  // 반전 시작 지점 (psi = phiF)
+  if(psi>m.phiF){
+    let hit=null;
+    for(const o of pts){ if(o.p<=m.phiF){ hit=o; break; } }
+    if(hit){
+      s+='<line x1="'+X(hit.x)+'" y1="'+padT+'" x2="'+X(hit.x)+'" y2="'+(padT+plotH)+'" stroke="var(--red)" stroke-width="1" stroke-dasharray="4 4" opacity="0.8"/>';
+      s+=T(X(hit.x)+5,padT+14,'여기서 E_i = E_F (반전 시작)','var(--red)',10.5);
+    }
+  }
+
+  // 축
+  const yt=[-1,-0.5,0,0.5,1,1.5].filter(v=>v>=eLo&&v<=eHi);
+  yt.forEach(v=>{ s+='<line x1="'+padL+'" y1="'+Y(v)+'" x2="'+(padL-5)+'" y2="'+Y(v)+'" stroke="var(--line)"/>';
+    s+=T(padL-8,Y(v)+4,v.toFixed(1),'var(--dim)',10,'end'); });
+  s+=T(padL-8,padT-16,'E (eV)','var(--dim)',10,'end');
+
+  const xt=[0,0.25,0.5,0.75,1].map(f=>f*xmax);
+  xt.forEach(v=>{ s+=T(X(v),padT+plotH+16,fmt(v,xmax>200?0:1),'var(--dim)',10,'middle'); });
+  s+=T(padL+plotW/2,padT+plotH+38,'표면으로부터 거리 (nm)','var(--dim)',11,'middle');
+
+  s+='</svg>';
+  return s;
+}
+
+/* ---------- C-V ---------- */
+function drawCV(m,VG){
+  const W=940,H=300,padL=64,padR=30,padT=24,padB=52;
+  const plotW=W-padL-padR, plotH=H-padT-padB;
+  const vLo=m.VFB-1.6, vHi=m.VFB+3.0;
+  const X=v=>padL+(v-vLo)/(vHi-vLo)*plotW;
+  const Y=c=>padT+(1-c)*plotH;
+  const T=(x,y,t,c,s,a,w)=>'<text x="'+x+'" y="'+y+'" fill="'+c+'" font-size="'+(s||11)+
+    '" font-weight="'+(w||400)+'" text-anchor="'+(a||'start')+'">'+t+'</text>';
+
+  let s='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="C-V 곡선">';
+  // 영역 음영
+  s+='<rect x="'+X(vLo)+'" y="'+padT+'" width="'+(X(m.VFB)-X(vLo))+'" height="'+plotH+'" fill="var(--ec)" opacity="0.07"/>';
+  s+='<rect x="'+X(m.VT)+'" y="'+padT+'" width="'+(X(vHi)-X(m.VT))+'" height="'+plotH+'" fill="var(--red)" opacity="0.06"/>';
+
+  // Cmin
+  const cm=m.Cmin/m.Cox;
+  s+='<line x1="'+padL+'" y1="'+Y(cm)+'" x2="'+(padL+plotW)+'" y2="'+Y(cm)+'" stroke="var(--dim)" stroke-width="1" stroke-dasharray="5 4"/>';
+  s+=T(padL+plotW-4,Y(cm)-6,'C_min/C_ox = '+fmt(cm,3),'var(--dim)',10,'end');
+
+  // 곡선
+  const N=260, pp=[];
+  for(let i=0;i<=N;i++){
+    const v=vLo+(vHi-vLo)*i/N;
+    const ps=m.solve(v);
+    pp.push(X(v)+','+Y(m.capOf(ps)/m.Cox));
+  }
+  s+='<polyline points="'+pp.join(' ')+'" fill="none" stroke="var(--acc)" stroke-width="2.4"/>';
+
+  // 축
+  s+='<line x1="'+padL+'" y1="'+(padT+plotH)+'" x2="'+(padL+plotW)+'" y2="'+(padT+plotH)+'" stroke="var(--line)"/>';
+  [0,0.25,0.5,0.75,1].forEach(v=>{ s+=T(padL-8,Y(v)+4,v.toFixed(2),'var(--dim)',10,'end');
+    s+='<line x1="'+padL+'" y1="'+Y(v)+'" x2="'+(padL-5)+'" y2="'+Y(v)+'" stroke="var(--line)"/>'; });
+  s+=T(padL-8,padT-8,'C/C_ox','var(--dim)',10,'end');
+
+  let xt=[vLo,m.VFB,0,m.VT,vHi].filter(v=>v>=vLo&&v<=vHi);
+  const xt2=[]; xt.forEach(v=>{ if(!xt2.some(u=>Math.abs(X(u)-X(v))<34)) xt2.push(v); }); xt=xt2;
+  xt.forEach(v=>{ s+=T(X(v),padT+plotH+16,fmt(v,2),'var(--dim)',10,'middle');
+    s+='<line x1="'+X(v)+'" y1="'+(padT+plotH)+'" x2="'+X(v)+'" y2="'+(padT+plotH+4)+'" stroke="var(--line)"/>'; });
+  s+=T(padL+plotW/2,padT+plotH+36,'V_G (V)','var(--dim)',11,'middle');
+
+  // 마커
+  const psNow=m.solve(VG);
+  const cNow=m.capOf(psNow)/m.Cox;
+  s+='<circle cx="'+X(VG)+'" cy="'+Y(cNow)+'" r="6" fill="var(--warn)" stroke="var(--bg)" stroke-width="2"/>';
+  s+=T(X(VG)+10,Y(cNow)-8,'동작점 '+fmt(cNow,3),'var(--warn)',10.5,'start',600);
+
+  s+=T(X(m.VFB),padT+16,'V_FB','var(--dim)',10,'middle');
+  s+=T(X(m.VT),padT+16,'V_T','var(--dim)',10,'middle');
+  s+='</svg>';
+  return s;
+}
+
+/* ---------- 게이트–산화막 개략 ---------- */
+function drawStack(m,psi,VG){
+  const W=940,H=230,padL=56,padR=24,padT=34,padB=40;
+  const plotH=H-padT-padB;
+  const xG0=padL,xG1=340,xO1=470,xS1=W-padR;
+  const EcB=Eg/2+m.phiF;
+  const EcS=EcB-psi;
+  const EcOxSi=EcS+dEcOx;
+  const Vox=VG-m.VFB-psi;
+  const EcOxM=EcOxSi-Vox;
+  const EFm=-VG;
+
+  const all=[EcS,EcOxSi,EcOxM,EcB,0,EFm];
+  let hi=Math.max.apply(null,all)+0.45, lo=Math.min.apply(null,all)-0.45;
+  const Y=e=>padT+(hi-e)/(hi-lo)*plotH;
+  const T=(x,y,t,c,s,a,w)=>'<text x="'+x+'" y="'+y+'" fill="'+c+'" font-size="'+(s||10.5)+
+    '" font-weight="'+(w||400)+'" text-anchor="'+(a||'start')+'">'+t+'</text>';
+
+  let s='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="게이트 산화막 개략도">';
+  s+='<defs><pattern id="mh" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">'+
+     '<line x1="0" y1="0" x2="0" y2="7" stroke="var(--line)" stroke-width="2.5"/></pattern></defs>';
+  s+='<rect x="'+xG0+'" y="'+padT+'" width="'+(xG1-xG0)+'" height="'+plotH+'" fill="url(#mh)" opacity="0.45"/>';
+  s+='<rect x="'+xG1+'" y="'+padT+'" width="'+(xO1-xG1)+'" height="'+plotH+'" fill="var(--acc)" opacity="0.08"/>';
+  s+=T((xG0+xG1)/2,padT-10,'게이트 (금속/폴리)','var(--dim)',11,'middle');
+  s+=T((xG1+xO1)/2,padT-10,'SiO₂','var(--dim)',11,'middle');
+  s+=T(xO1+10,padT-10,'Si (표면 → 내부)','var(--dim)',11);
+
+  // 에너지 축
+  let step=1.0; const yt=[];
+  for(let v=Math.ceil(lo);v<=hi;v+=step){ if(v>=lo&&v<=hi) yt.push(v); }
+  yt.forEach(v=>{ s+='<line x1="'+padL+'" y1="'+Y(v)+'" x2="'+(padL-5)+'" y2="'+Y(v)+'" stroke="var(--line)"/>';
+    s+=T(padL-8,Y(v)+4,v.toFixed(1),'var(--dim)',10,'end'); });
+  s+=T(padL-8,padT-12,'E (eV)','var(--dim)',10,'end');
+
+  // E_Fm, E_F
+  s+='<line x1="'+xG0+'" y1="'+Y(EFm)+'" x2="'+xG1+'" y2="'+Y(EFm)+'" stroke="var(--ef)" stroke-width="1.8" stroke-dasharray="6 3"/>';
+  s+=T(xG0+6,Y(EFm)-7,'E_Fm = '+fmt(EFm,2)+' eV','var(--ef)',10.5,'start',600);
+  s+='<line x1="'+xO1+'" y1="'+Y(0)+'" x2="'+xS1+'" y2="'+Y(0)+'" stroke="var(--ef)" stroke-width="1.8"/>';
+  s+=T(xS1-6,Y(0)+15,'E_F (Si) = 0','var(--ef)',10.5,'end',600);
+
+  // 산화막 E_c
+  s+='<line x1="'+xG1+'" y1="'+Y(EcOxM)+'" x2="'+xO1+'" y2="'+Y(EcOxSi)+'" stroke="var(--ec)" stroke-width="2.4"/>';
+  s+='<circle cx="'+xO1+'" cy="'+Y(EcOxSi)+'" r="3.2" fill="var(--ec)"/>';
+  s+=T((xG1+xO1)/2,Y(EcOxM)+16,'E_c(SiO₂)','var(--ec)',10,'middle',600);
+
+  // Si 표면 → 내부
+  s+='<line x1="'+xO1+'" y1="'+Y(EcS)+'" x2="'+(xO1+90)+'" y2="'+Y(EcS)+'" stroke="var(--ec)" stroke-width="2.4"/>';
+  s+='<line x1="'+(xO1+90)+'" y1="'+Y(EcS)+'" x2="'+xS1+'" y2="'+Y(EcB)+'" stroke="var(--ec)" stroke-width="2.4"/>';
+  s+=T(xO1+96,Y(EcB)-10,'E_c(Si) 내부','var(--ec)',10);
+
+  // 3.10 eV 간격
+  const xo=xO1-26;
+  s+='<line x1="'+xo+'" y1="'+Y(EcOxSi)+'" x2="'+xo+'" y2="'+Y(EcS)+'" stroke="var(--txt)" stroke-width="1" opacity="0.85" marker-start="url(#st1)" marker-end="url(#st1)"/>';
+  s+=T(xo-6,(Y(EcOxSi)+Y(EcS))/2+4,'3.10 eV','var(--txt)',10,'end',600);
+
+  s+=T(xO1-6,Y(EcOxM)-10,'V_ox = '+fmt(Vox,3)+' V','var(--dim)',10,'end');
+
+  s+='</svg>';
+  return s;
+}
+
+/* ---------- 렌더 ---------- */
+let hidden=false;
+function render(){
+  const phiM=parseFloat($('gate').value);
+  const Na=Math.pow(10,parseFloat($('na').value));
+  const tox=parseFloat($('tox').value)*1e-7;
+  const VG=parseFloat($('vg').value);
+  const m=build(Na,tox,phiM);
+  const psi=m.solve(VG);
+
+  $('nav').textContent=sci(Na)+' cm\u207B\u00B3';
+  $('toxv').textContent=fmt(tox*1e7,1)+' nm';
+  $('vgv').textContent=fmt(VG,2)+' V';
+
+  let label,cls,why;
+  if(psi<-0.02){ label='축적 (accumulation)'; cls='acc'; why='ψ_s < 0 — 표면에 다수캐리어(정공) 축적'; }
+  else if(psi<=0.02){ label='평탄대 (flat band)'; cls='flat'; why='ψ_s ≈ 0 — V_G = V_FB'; }
+  else if(psi<m.phiF){ label='공핍 (depletion)'; cls='dep'; why='0 < ψ_s < φ_F — 표면이 비어 있음'; }
+  else if(psi<2*m.phiF){ label='약반전 (weak inversion)'; cls='winv'; why='φ_F ≤ ψ_s < 2φ_F — 전자와 정공이 비슷함'; }
+  else { label='강반전 (strong inversion)'; cls='sinv'; why='ψ_s ≥ 2φ_F — 표면이 n형처럼 뒤집힘'; }
+
+  const pill=$('regimePill');
+  pill.className='pill '+cls; pill.textContent=hidden?'? ? ?':label;
+  pill.classList.toggle('hidden-num',hidden);
+  $('regimeWhy').textContent=hidden?'':why+'  (φ_F = '+fmt(m.phiF,3)+' V)';
+
+  const W=Math.sqrt(2*epsS*Math.max(psi,0)/(q*Na));
+  const items=[
+    ['φ_F',fmt(m.phiF,4),'V'],
+    ['C_ox',sci(m.Cox),'F/cm²'],
+    ['V_FB (= φ_ms)',fmt(m.VFB,3),'V'],
+    ['V_T',fmt(m.VT,3),'V'],
+    ['ψ_s',fmt(psi,4),'V'],
+    ['W (공핍폭)',(W*1e7).toFixed(1),'nm'],
+    ['Q_s',sci(m.Qs(psi)),'C/cm²'],
+    ['C / C_ox',fmt(m.capOf(psi)/m.Cox,4),''],
+    ['V_ox',fmt(VG-m.VFB-psi,3),'V']
+  ];
+  $('vals').innerHTML=items.map(it=>'<div class="v"><div class="k">'+it[0]+
+    '</div><div class="n'+(hidden?' hidden-num':'')+'">'+it[1]+'</div><div class="u">'+it[2]+'</div></div>').join('');
+
+  $('bandPanel').innerHTML=drawBand(m,psi);
+  $('cvPanel').innerHTML=drawCV(m,VG);
+  $('stackPanel').innerHTML=drawStack(m,psi,VG);
+
+  $('bandNote').innerHTML='φ_s가 <b>φ_F</b>를 넘으면 표면에서 E_i 가 E_F 아래로 내려가 <b>반전</b>이 시작되고, '+
+    '<b>2φ_F</b>를 넘으면 강반전입니다. 빨간 점선이 그 경계입니다. '+
+    '강반전에서 ψ_s는 2φ_F 근처에 머물며 아주 천천히 증가합니다. 공핍 근사에서는 2φ_F로 고정되지만, '+
+    '여기서는 포아송 방정식을 수치로 풀어 정확한 값을 씁니다.';
+
+  const chk=[
+    ['V_G = V_FB + ψ_s + V_ox', Math.abs((m.VFB+psi+(VG-m.VFB-psi))-VG)<1e-9, '항상 성립'],
+    ['C ≤ C_ox', m.capOf(psi)<=m.Cox*1.0001, fmt(m.capOf(psi)/m.Cox,4)+' × C_ox'],
+    ['ψ_s = 0 at V_G = V_FB', Math.abs(m.solve(m.VFB))<1e-6, sci(Math.abs(m.solve(m.VFB)))+' V'],
+    ['C_min (이론)', true, fmt(m.Cmin/m.Cox,4)+' × C_ox, W_T = '+(m.WT*1e7).toFixed(0)+' nm'],
+    ['V_T 정의: ψ_s(2φ_F)', Math.abs(m.solve(m.VT)-2*m.phiF)<0.02, fmt(m.solve(m.VT),3)+' V vs '+fmt(2*m.phiF,3)+' V']
+  ];
+  $('checks').innerHTML=chk.map(c=>'<div class="chk"><span>'+c[0]+
+    '</span><b class="'+(c[1]?'ok':'bad')+'">'+(c[1]?'✓ ':'! ')+c[2]+'</b></div>').join('');
+}
+
+$('hideBtn').addEventListener('click',()=>{ hidden=!hidden;
+  $('hideBtn').textContent=hidden?'영역명 보이기':'영역명 가리기'; render(); });
+['gate','na','tox','vg'].forEach(id=>$(id).addEventListener('input',render));
+render();
+</script>
+</body>
+</html>

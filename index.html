@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>전자공학 시각화 튜터</title>
+<style>
+  :root{ --bg:#0f1216; --panel:#161b22; --line:#2a323d; --txt:#e6edf3; --dim:#9aa7b4; --acc:#58a6ff; --ok:#3fb950; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+       padding:32px 20px 60px;-webkit-text-size-adjust:100%}
+  .wrap{max-width:820px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 6px}
+  .sub{color:var(--dim);font-size:13.5px;margin-bottom:26px}
+  a.card{display:block;text-decoration:none;color:inherit;background:var(--panel);
+         border:1px solid var(--line);border-radius:12px;padding:15px 17px;margin-bottom:11px;transition:border-color .15s}
+  a.card:hover{border-color:var(--acc)}
+  .t{font-size:15.5px;font-weight:700;color:var(--txt);margin-bottom:3px}
+  .d{font-size:13px;color:var(--dim)}
+  .tag{display:inline-block;font-size:11px;color:var(--ok);border:1px solid var(--ok);
+       border-radius:999px;padding:1px 8px;margin-left:7px;vertical-align:2px}
+  .note{font-size:12.5px;color:var(--dim);margin-top:22px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>전자공학 시각화 튜터</h1>
+  <div class="sub">과목별 도구 모음 · 각 파일은 단독으로 동작합니다</div>
+
+  <a class="card" href="mosfet.html">
+    <div class="t">MOSFET 동작 영역 · I-V · 채널 밴드 <span class="tag">NEW</span></div>
+    <div class="d">컷오프/선형/포화 판정 · 출력·전달 특성 · 핀치오프까지의 채널 에너지 · g_m, r_o</div>
+  </a>
+
+  <a class="card" href="three-phase.html">
+    <div class="t">3상 회로 해석 <span class="tag">NEW</span></div>
+    <div class="d">Y-Y · Y-Δ · Δ-Y · Δ-Δ · 평형/불평형 부하 · 4선식/3선식 · 페이저도</div>
+  </a>
+
+  <a class="card" href="circuit-editor.html">
+    <div class="t">회로 그리기 · 테브난/노턴</div>
+    <div class="d">점에서 점으로 소자를 놓고 값을 입력 · 단계별 축소 · 등가회로</div>
+  </a>
+
+  <a class="card" href="mos-cap.html">
+    <div class="t">MOS Capacitor 밴드 다이어그램</div>
+    <div class="d">축적/평탄/공핍/반전 판정 · 저주파 C-V · 게이트-산화막 개략</div>
+  </a>
+
+  <a class="card" href="schottky-band.html">
+    <div class="t">Schottky 밴드 다이어그램</div>
+    <div class="d">Cr-Si 예제 · 평형/역바이어스 비교 · 세로축 압축 표시</div>
+  </a>
+
+  <a class="card" href="thevenin.html">
+    <div class="t">테브난/노턴 (값 편집형)</div>
+    <div class="d">검증된 회로 2개에서 값을 바꿔가며 단계 확인</div>
+  </a>
+
+  <div class="note">
+    브라우저 주소가 <b>127.0.0.1</b>로 시작하면 이 PC에서만 열립니다 (iPad에서는 열리지 않습니다).<br>
+    서버를 끄려면 최소화된 <b>aside-local-server</b> 창을 닫으세요.
+  </div>
+</div>
+</body>
+</html>

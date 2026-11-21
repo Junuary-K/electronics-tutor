@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3상 회로 · Y-Y / Y-Δ / Δ-Y / Δ-Δ</title>
+<style>
+  :root{ --bg:#0f1216; --panel:#161b22; --line:#2a323d; --txt:#e6edf3; --dim:#9aa7b4;
+         --acc:#58a6ff; --warn:#f0883e; --ok:#3fb950; --red:#f85149; --pur:#bc8cff; --wire:#8b949e; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+       padding:16px 14px 40px;-webkit-text-size-adjust:100%}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .chip{font:inherit;font-size:13px;padding:7px 13px;border-radius:8px;cursor:pointer;
+        border:1px solid var(--line);background:var(--bg);color:var(--txt)}
+  .chip.on{border-color:var(--acc);color:var(--acc);font-weight:700}
+  .grid{display:grid;gap:9px}
+  .fld{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
+  .fld label{display:block;font-size:11px;color:var(--dim);margin-bottom:2px}
+  .fld input,.fld select{width:100%;background:transparent;border:0;color:var(--txt);
+        font:inherit;font-size:14px;outline:none;padding:0}
+  .fld input:disabled{color:var(--dim)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+  th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right}
+  th:first-child,td:first-child{text-align:left;color:var(--dim)}
+  th{font-size:11.5px;color:var(--dim);font-weight:600}
+  tr:last-child td{border-bottom:0}
+  svg{width:100%;max-width:940px;height:auto;display:block;margin:0 auto;background:var(--bg);border-radius:8px}
+  .chk{font-size:12.5px;display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .chk:last-child{border-bottom:0}
+  .ok{color:var(--ok)} .bad{color:var(--warn)}
+  .note{font-size:12.5px;color:var(--dim);margin-top:8px}
+  .note b{color:var(--txt)}
+  .st{border-left:2px solid var(--line);padding:2px 0 2px 12px;margin-bottom:12px}
+  .st .h{font-size:13px;font-weight:700;color:var(--acc);margin-bottom:3px}
+  .st .fm{font-size:12.5px;color:var(--dim);margin:2px 0;font-family:Consolas,'Cascadia Mono',monospace;white-space:pre-wrap}
+  .st .rs{font-size:13.5px;color:var(--txt);font-variant-numeric:tabular-nums;margin-top:3px}
+  .st .rs b{color:var(--ok)}
+</style>
+</head>
+<body>
+
+<h1>3상 회로 해석 · 4가지 결선</h1>
+<div class="sub">Y-Y · Y-Δ · Δ-Y · Δ-Δ · 평형과 <b>상별 불평형 부하</b> 지원 · 4선식/3선식</div>
+
+<div class="card">
+  <div class="row" style="margin-bottom:10px">
+    <button class="chip on" data-cfg="YY">Y – Y</button>
+    <button class="chip" data-cfg="YD">Y – Δ</button>
+    <button class="chip" data-cfg="DY">Δ – Y</button>
+    <button class="chip" data-cfg="DD">Δ – Δ</button>
+    <span style="width:10px"></span>
+    <button class="chip" id="ex1">예제①</button>
+    <button class="chip" id="ex2">예제②</button>
+    <button class="chip" id="ex3">예제③</button>
+    <button class="chip" id="ex4">예제④</button>
+  </div>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
+    <div class="fld"><label>선간전압 V_L (rms)</label><input id="VL" type="number" step="any" value="380"></div>
+    <div class="fld"><label>상순서</label><select id="seq"><option value="1">정상 (a-b-c)</option><option value="-1">역상 (a-c-b)</option></select></div>
+    <div class="fld"><label>선로 R (Ω)</label><input id="lr" type="number" step="any" value="0"></div>
+    <div class="fld"><label>선로 X (Ω)</label><input id="lx" type="number" step="any" value="0"></div>
+    <div class="fld"><label>중성선</label><select id="neu">
+      <option value="solid">4선식 (중성선)</option><option value="none">3선식 (없음)</option><option value="z">중성선 임피던스</option>
+    </select></div>
+    <div class="fld"><label>Zn R (Ω)</label><input id="nr" type="number" step="any" value="0"></div>
+    <div class="fld"><label>Zn X (Ω)</label><input id="nx" type="number" step="any" value="0"></div>
+  </div>
+  <div class="row" style="margin:10px 0 6px">
+    <button class="chip on" id="balBtn">부하 균형</button>
+    <span class="note" style="margin:0">불평형으로 바꾸면 B·C상 값을 따로 넣을 수 있습니다.</span>
+  </div>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr))">
+    <div class="fld"><label>Za R</label><input id="zar" type="number" step="any" value="10"></div>
+    <div class="fld"><label>Za X</label><input id="zax" type="number" step="any" value="5"></div>
+    <div class="fld"><label>Zb R</label><input id="zbr" type="number" step="any" value="10" disabled></div>
+    <div class="fld"><label>Zb X</label><input id="zbx" type="number" step="any" value="5" disabled></div>
+    <div class="fld"><label>Zc R</label><input id="zcr" type="number" step="any" value="10" disabled></div>
+    <div class="fld"><label>Zc X</label><input id="zcx" type="number" step="any" value="5" disabled></div>
+  </div>
+  <div class="note" id="loadNote"></div>
+</div>
+
+<div class="card" id="resCard"></div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">풀이 과정</div>
+  <div id="solution"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">회로</div>
+  <div id="schem"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">페이저도</div>
+  <div id="phasor"></div>
+  <div class="note">전압은 가는 선, 전류는 굵은 선. 각도는 a상 전압을 0° 기준으로 표시했습니다.</div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">검산</div>
+  <div id="checks"></div>
+</div>
+
+<script>
+/* ---------- 복소수 ---------- */
+const C=(re,im)=>({re:re,im:im});
+const cadd=(a,b)=>C(a.re+b.re,a.im+b.im);
+const csub=(a,b)=>C(a.re-b.re,a.im-b.im);
+const cmul=(a,b)=>C(a.re*b.re-a.im*b.im, a.re*b.im+a.im*b.re);
+const cdiv=(a,b)=>{const d=b.re*b.re+b.im*b.im; return C((a.re*b.re+a.im*b.im)/d,(a.im*b.re-a.re*b.im)/d);};
+const cabs=a=>Math.hypot(a.re,a.im);
+const cang=a=>Math.atan2(a.im,a.re)*180/Math.PI;
+const pol=(m,deg)=>C(m*Math.cos(deg*Math.PI/180), m*Math.sin(deg*Math.PI/180));
+const Zof=(r,x)=>C(r,x);
+const fmt=(v,d)=>{ d=(d===undefined)?3:d;
+  return v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); };
+const fz=z=>fmt(cabs(z),3)+' ∠ '+fmt(cang(z),1)+'°';
+
+/* ---------- 복소 MNA ---------- */
+function solveC(nodes, els, ref){
+  const list=Object.keys(nodes).filter(n=>n!==ref);
+  const idx={}; list.forEach((n,i)=>idx[n]=i);
+  const vs=els.filter(e=>e.t==='V');
+  const n=list.length+vs.length;
+  const A=[],b=[];
+  for(let i=0;i<n;i++){ A.push(new Array(n).fill(null).map(()=>C(0,0))); b.push(C(0,0)); }
+  els.forEach(e=>{
+    if(e.t==='Z'){
+      const y=cdiv(C(1,0), e.z);
+      const a=e.a, c=e.b;
+      if(a!==ref){ A[idx[a]][idx[a]]=cadd(A[idx[a]][idx[a]],y); if(c!==ref) A[idx[a]][idx[c]]=csub(A[idx[a]][idx[c]],y); }
+      if(c!==ref){ A[idx[c]][idx[c]]=cadd(A[idx[c]][idx[c]],y); if(a!==ref) A[idx[c]][idx[a]]=csub(A[idx[c]][idx[a]],y); }
+    } else if(e.t==='I'){
+      if(e.a!==ref) b[idx[e.a]]=csub(b[idx[e.a]], e.i);
+      if(e.b!==ref) b[idx[e.b]]=cadd(b[idx[e.b]], e.i);
+    }
+  });
+  vs.forEach((e,k)=>{
+    const row=list.length+k;
+    if(e.a!==ref){ A[row][idx[e.a]]=cadd(A[row][idx[e.a]],C(1,0)); A[idx[e.a]][row]=cadd(A[idx[e.a]][row],C(1,0)); }
+    if(e.b!==ref){ A[row][idx[e.b]]=csub(A[row][idx[e.b]],C(1,0)); A[idx[e.b]][row]=csub(A[idx[e.b]][row],C(1,0)); }
+    b[row]=e.v;
+  });
+  for(let i=0;i<n;i++){
+    let p=i; for(let r=i+1;r<n;r++) if(cabs(A[r][i])>cabs(A[p][i])) p=r;
+    const ta=A[i]; A[i]=A[p]; A[p]=ta; const tb=b[i]; b[i]=b[p]; b[p]=tb;
+    if(cabs(A[i][i])<1e-14) continue;
+    for(let r=i+1;r<n;r++){
+      const f=cdiv(A[r][i],A[i][i]);
+      if(cabs(f)<1e-18) continue;
+      for(let c=i;c<n;c++) A[r][c]=csub(A[r][c], cmul(f,A[i][c]));
+      b[r]=csub(b[r], cmul(f,b[i]));
+    }
+  }
+  const x=new Array(n).fill(null).map(()=>C(0,0));
+  for(let i=n-1;i>=0;i--){
+    if(cabs(A[i][i])<1e-14){ x[i]=C(0,0); continue; }
+    let s=b[i];
+    for(let c=i+1;c<n;c++) s=csub(s, cmul(A[i][c],x[c]));
+    x[i]=cdiv(s,A[i][i]);
+  }
+  const v={}; v[ref]=C(0,0);
+  list.forEach((nd,i)=>v[nd]=x[i]);
+  return {v:v, xa:x, base:list.length};
+}
+
+/* ---------- 모델 ---------- */
+function buildModel(p){
+  const ang = p.seq>0 ? [0,-120,120] : [0,120,-120];
+  const nodes={'N':1,'a1':1,'b1':1,'c1':1,'a2':1,'b2':1,'c2':1};
+  const els=[];
+  const Vph=p.VL/Math.sqrt(3);
+
+  // 전원 (Y 등가)
+  let Van,Vbn,Vcn;
+  if(p.srcY){
+    Van=pol(Vph,ang[0]); Vbn=pol(Vph,ang[1]); Vcn=pol(Vph,ang[2]);
+  } else {
+    // Δ 전원: 입력 V_L 을 Δ 상전압(=선간전압)으로 보고 Y 등가로 변환
+    const Vab=pol(p.VL,ang[0]), Vbc=pol(p.VL,ang[1]), Vca=pol(p.VL,ang[2]);
+    Van=cdiv(csub(Vab,Vca),C(3,0));
+    Vbn=cdiv(csub(Vbc,Vab),C(3,0));
+    Vcn=cdiv(csub(Vca,Vbc),C(3,0));
+  }
+  els.push({t:'V',a:'a1',b:'N',v:Van,ph:'a'});
+  els.push({t:'V',a:'b1',b:'N',v:Vbn,ph:'b'});
+  els.push({t:'V',a:'c1',b:'N',v:Vcn,ph:'c'});
+
+  // 선로
+  const Zl=Zof(p.lr,p.lx);
+  const isShort=z=>(z.re===0&&z.im===0);
+  ['a','b','c'].forEach(ph=>{
+    if(isShort(Zl)) els.push({short:true,a:ph+'1',b:ph+'2',ph:ph});
+    else els.push({t:'Z',a:ph+'1',b:ph+'2',z:Zl,ph:ph,kind:'line'});
+  });
+
+  // 부하
+  const Zs=[p.Za,p.Zb,p.Zc];
+  if(p.loadY){
+    nodes['n2']=1;
+    ['a','b','c'].forEach((ph,i)=>{ els.push({t:'Z',a:ph+'2',b:'n2',z:Zs[i],ph:ph,kind:'load'}); });
+    if(p.neu==='solid') els.push({short:true,a:'n2',b:'N',ph:'n'});
+    else if(p.neu==='z') els.push({t:'Z',a:'n2',b:'N',z:Zof(p.nr,p.nx),ph:'n',kind:'neutral'});
+  } else {
+    els.push({t:'Z',a:'a2',b:'b2',z:p.Za,ph:'ab',kind:'load'});
+    els.push({t:'Z',a:'b2',b:'c2',z:p.Zb,ph:'bc',kind:'load'});
+    els.push({t:'Z',a:'c2',b:'a2',z:p.Zc,ph:'ca',kind:'load'});
+  }
+  // zero-impedance 브랜치는 노드 병합으로 처리 (수치 안정)
+  const parent={};
+  const fnd=k=>{ if(!(k in parent)) parent[k]=k;
+    while(parent[k]!==k){ parent[k]=parent[parent[k]]; k=parent[k]; } return k; };
+  const uni=(a,b)=>{ const ra=fnd(a), rb=fnd(b); if(ra!==rb) parent[ra]=rb; };
+  Object.keys(nodes).forEach(fnd);
+  els.forEach(e=>{ fnd(e.a); fnd(e.b); if(e.short) uni(e.a,e.b); });
+  const remap={}; Object.keys(nodes).forEach(k=>remap[k]=fnd(k));
+  const newNodes={}; Object.keys(nodes).forEach(k=>newNodes[remap[k]]=1);
+  const newEls=[];
+  els.forEach(e=>{ if(e.short) return; newEls.push(Object.assign({}, e, {a:remap[e.a], b:remap[e.b]})); });
+  return {nodes:newNodes, els:newEls, ang:ang, remap:remap};
+}
+
+function analyse(p){
+  const m=buildModel(p);
+  const sol=solveC(m.nodes, m.els, 'N');
+  const RM=k=>(m.remap&&m.remap[k])?m.remap[k]:k;
+  const VN=k=>(sol.v[RM(k)]||C(0,0));
+  const V=sol.v;
+
+  // 선전류: 전원 브랜치 전류 (전원 -> 선로 방향)
+  const I={};
+  ['a','b','c'].forEach((ph,i)=>{ I[ph]=cmul(C(-1,0), sol.xa[sol.base+i]); });
+
+  let Vload={}, Iphase=null;
+  if(p.loadY){
+    const vn=VN('n2');
+    ['a','b','c'].forEach(ph=>{ Vload[ph]=csub(VN(ph+'2'), vn); });
+  } else {
+    Vload={ab:csub(VN('a2'),VN('b2')), bc:csub(VN('b2'),VN('c2')), ca:csub(VN('c2'),VN('a2'))};
+    Iphase={ab:cdiv(Vload.ab,p.Za), bc:cdiv(Vload.bc,p.Zb), ca:cdiv(Vload.ca,p.Zc)};
+  }
+
+  // 중성선 전류 (a->N 방향의 합)
+  let Ineu=null;
+  if(p.loadY && p.neu!=='none'){
+    if(p.neu==='solid') Ineu=cmul(C(-1,0), cadd(cadd(I.a,I.b),I.c));
+    else Ineu=cdiv(VN('n2'), Zof(p.nr,p.nx));
+  }
+
+  // 전력 (부하가 흡수하는 복소전력 = |I|^2 Z)
+  let Sload=C(0,0);
+  if(p.loadY){
+    const Zs=[p.Za,p.Zb,p.Zc];
+    ['a','b','c'].forEach((ph,i)=>{ Sload=cadd(Sload, cmul(C(cabs(I[ph])*cabs(I[ph]),0), Zs[i])); });
+  } else {
+    const Zs=[p.Za,p.Zb,p.Zc];
+    ['ab','bc','ca'].forEach((k,i)=>{ const Iph=Iphase[k];
+      Sload=cadd(Sload, cmul(C(cabs(Iph)*cabs(Iph),0), Zs[i])); });
+  }
+  let Sline=C(0,0);
+  const Zl=Zof(p.lr,p.lx);
+  ['a','b','c'].forEach(ph=>{ Sline=cadd(Sline, cmul(C(cabs(I[ph])*cabs(I[ph]),0), Zl)); });
+
+  const Vneutral = p.loadY ? VN('n2') : null;
+  const src=[m.els[0].v, m.els[1].v, m.els[2].v];
+  return {V:V, I:I, Vload:Vload, Iphase:Iphase, Ineu:Ineu, Sload:Sload, Sline:Sline, m:m, src:src, Vn:Vneutral};
+}
+
+/* ---------- 렌더 ---------- */
+let cfg='YY', balanced=true;
+const $=id=>document.getElementById(id);
+function cfgFlags(c){ return {srcY:c[0]==='Y', loadY:c[1]==='Y'}; }
+
+function readParams(){
+  const f=cfgFlags(cfg);
+  return {
+    VL:parseFloat($('VL').value)||0, seq:parseInt($('seq').value,10),
+    srcY:f.srcY, loadY:f.loadY,
+    lr:parseFloat($('lr').value)||0, lx:parseFloat($('lx').value)||0,
+    neu:$('neu').value, nr:parseFloat($('nr').value)||0, nx:parseFloat($('nx').value)||0,
+    Za:Zof(parseFloat($('zar').value)||0, parseFloat($('zax').value)||0),
+    Zb:Zof(parseFloat($('zbr').value)||0, parseFloat($('zbx').value)||0),
+    Zc:Zof(parseFloat($('zcr').value)||0, parseFloat($('zcx').value)||0)
+  };
+}
+
+function render(){
+  const p=readParams();
+  $('loadNote').innerHTML = p.loadY
+    ? '부하 Y: 각 상 임피던스는 <b>상(중성점 기준) 임피던스</b>입니다.'+(p.neu==='none'?' <b>3선식</b>이라 중성점이 떠다니며 전위가 이동합니다.':'')
+    : '부하 Δ: 각 임피던스는 <b>선간(a-b, b-c, c-a) 브랜치</b> 임피던스입니다. 상전류 = 선간전압 / Z.';
+  const r=analyse(p);
+
+  // 표
+  const isY=p.loadY;
+  let rows='';
+  ['a','b','c'].forEach(ph=>{
+    const Vl=isY?r.Vload[ph]:r.Vload[ph+ (ph==='a'?'b':ph==='b'?'c':'a')];
+    rows+='<tr><td>'+ph+'상</td><td>'+fz(Vl)+'</td><td>'+fz(r.I[ph])+'</td><td>'+(isY?'—':fz(r.Iphase[ph==='a'?'ab':ph==='b'?'bc':'ca']))+'</td></tr>';
+  });
+  const S3=r.Sload;
+  $('resCard').innerHTML=
+   '<table><tr><th>상</th><th>'+(isY?'부하 상전압 (V)':'부하 선간전압 (V)')+'</th><th>선전류 (A)</th><th>'+(isY?'—':'Δ 상전류 (A)')+'</th></tr>'+rows+'</table>'+
+   '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin-top:12px">'+
+   [['3상 유효전력 P',fmt(S3.re,1)+' W'],['3상 무효전력 Q',fmt(S3.im,1)+' var'],
+    ['피상전력 |S|',fmt(cabs(S3),1)+' VA'],['역률',fmt(Math.abs(S3.re)/Math.max(cabs(S3),1e-12),3)],
+    ['선로 손실 P_line',fmt(r.Sline.re,1)+' W'],
+    ['중성선 전류 In',r.Ineu?fz(r.Ineu):(isY?'(3선식) 없음':'—')]]
+   .map(x=>'<div class="fld"><label>'+x[0]+'</label><div style="font-size:15px;font-variant-numeric:tabular-nums">'+x[1]+'</div></div>').join('')+
+   '</div>';
+
+  $('solution').innerHTML=solutionHTML(p,r);
+  $('schem').innerHTML=drawSchematic(p,r);
+  $('phasor').innerHTML=drawPhasor(p,r);
+  $('checks').innerHTML=checksHTML(p,r);
+}
+
+
+/* ---------- 풀이 과정 ---------- */
+function solutionHTML(p,r){
+  const S=[];
+  const CIRC=['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
+  const push=(h,f,rs)=>{ S.push({h:CIRC[S.length]+' '+h, f:f, rs:rs}); };
+  const cfgName=(p.srcY?'Y':'Δ')+'-'+(p.loadY?'Y':'Δ');
+  const Vph=p.VL/Math.sqrt(3);
+  const Zl=Zof(p.lr,p.lx);
+  const Zs=[p.Za,p.Zb,p.Zc];
+  const PH=['a','b','c'];
+
+  // ① 조건
+  push('문제 조건','결선 '+cfgName+' ,  V_L = '+fmt(p.VL,3)+' V (rms),  상순서 '+(p.seq>0?'정상':'역상')+
+       ' ,  선로 Z = '+fz(Zl),
+       '상전압 기준값  V_ph = V_L/√3 = '+fmt(Vph,3)+' V');
+
+  // ② 전원이 Δ이면 Y 등가 변환
+  if(!p.srcY){
+    const a=p.seq>0?[0,-120,120]:[0,120,-120];
+    const Van=r.src[0], Vbn=r.src[1], Vcn=r.src[2];
+    push('Δ 전원 → Y 등가 변환',
+      'V_an = (V_ab − V_ca)/3 ,  V_bn = (V_bc − V_ab)/3 ,  V_cn = (V_ca − V_bc)/3',
+      'V_an = '+fz(Van)+'   (크기 '+fmt(cabs(Van),3)+' V = V_L/√3, 위상 '+
+      fmt(cang(Van),1)+'° 만큼 앞섬)');
+  }
+
+  // 상전압 확정 (Y 전원)
+  if(p.srcY){
+    push('상전압 확정','V_an = V_ph∠0° ,  V_bn = V_ph∠'+(p.seq>0?'−120':'+120')+'° ,  V_cn = V_ph∠'+(p.seq>0?'+120':'−120')+'°',
+      'V_an = '+fz(r.src[0])+'\nV_bn = '+fz(r.src[1])+'\nV_cn = '+fz(r.src[2]));
+  }
+
+  // ③ 부하가 Δ이고 평형이면 Δ→Y 변환 안내
+  const bal = cabs(csub(Zs[0],Zs[1]))<1e-9 && cabs(csub(Zs[1],Zs[2]))<1e-9;
+  if(!p.loadY){
+    if(bal){
+      const ZY=cdiv(Zs[0],C(3,0));
+      push('Δ 부하 → Y 등가 변환','Z_Y = Z_Δ / 3',
+        'Z_Y = '+fz(ZY)+'  →  1상 등가회로로 계산 가능');
+    } else {
+      push('Δ 부하 (불평형) — 변환하지 않음',
+        'Δ→Y 변환은 세 상이 같을 때만 성립.  불평형이므로 선간전압을 그대로 각 상에 적용',
+        'Z_ab = '+fz(Zs[0])+' , Z_bc = '+fz(Zs[1])+' , Z_ca = '+fz(Zs[2]));
+    }
+  }
+
+  // ④ 중성점
+  if(p.loadY){
+    if(p.neu==='none'){
+      const Vn=r.Vn||C(0,0);
+      push('중성점 전위 (3선식)',
+        "V_n'n = Σ(V_ph / Z_ph) / Σ(1 / Z_ph)   (중성선이 없어 0 이 아님)",
+        "V_n'n = "+fz(Vn)+"   → 이만큼 중성점이 이동\n"+
+        "이동 후 상전압:  V_an' = "+fz(csub(r.src[0],Vn))+" ,  V_bn' = "+fz(csub(r.src[1],Vn))+
+        " ,  V_cn' = "+fz(csub(r.src[2],Vn)));
+    } else if(p.neu==='solid'){
+      push('중성점','4선식이므로 중성점 전위 = 0 V','V_n = 0  (상전압이 그대로 부하에 걸림)');
+    } else {
+      const Zn=Zof(p.nr,p.nx);
+      push('중성점 (중성선 임피던스)','V_n = I_n · Z_n', 'Z_n = '+fz(Zn)+' ,  V_n = '+fz(r.Vn||C(0,0)));
+    }
+  }
+
+  // ⑤ 상전류
+  if(p.loadY){
+    let rows='';
+    PH.forEach((ph,i)=>{
+      const Vs=r.src[i];
+      const Vn=(p.neu==='none')?(r.Vn||C(0,0)):C(0,0);
+      const Zt=cadd(Zl,Zs[i]);
+      const I=cdiv(csub(Vs,Vn),Zt);
+      rows+='I_'+ph+' = ('+fz(Vs)+' − '+fz(Vn)+') / '+fz(Zt)+' = '+fz(I)+'\n';
+      rows+='     크기 '+fmt(cabs(I),3)+' A, 위상 '+fmt(cang(I),1)+'°\n';
+    });
+    push('각 상 전류','I_a = (V_an − V_n) / (Z_line + Z_a)   (b, c 동일)', rows.trim());
+  } else if(bal){
+    const ZY=cdiv(Zs[0],C(3,0));
+    const Zt=cadd(Zl,ZY);
+    const Ia=cdiv(r.src[0],Zt);
+    push('1상 등가회로 (a상만)','Z_total = Z_line + Z_Y',
+      'Z_total = '+fz(Zl)+' + '+fz(ZY)+' = '+fz(Zt)+'\n'+
+      'I_a = V_an / Z_total = '+fz(r.src[0])+' / '+fz(Zt)+' = '+fz(Ia));
+    push('b·c 상은 위상만 이동','평형이므로 크기는 같고 위상만 120° 차이',
+      'I_b = I_a ∠ '+(p.seq>0?'−120':'+120')+'° = '+fz(r.I.b)+'\n'+
+      'I_c = I_a ∠ '+(p.seq>0?'+120':'−120')+'° = '+fz(r.I.c));
+    push('역변환: 선전류 → Δ 상전류','|I_Δ| = |I_L| / √3 ,  I_ab 는 I_a 보다 30° 앞섬',
+      'I_ab = (I_a/√3) ∠ +30° = '+fz(r.Iphase.ab)+'\n'+
+      'I_bc = I_ab ∠ −120° = '+fz(r.Iphase.bc)+'\n'+
+      'I_ca = I_ab ∠ +120° = '+fz(r.Iphase.ca));
+    push('검산: 직접 계산과 비교','I_ab = V_ab / Z_Δ   (선간전압 그대로)',
+      'I_ab = '+fz(r.Vload.ab)+' / '+fz(Zs[0])+' = '+fz(cdiv(r.Vload.ab,Zs[0]))+
+      '   (위 값 '+fz(r.Iphase.ab)+' 와 일치해야 함)');
+  } else {
+    let rows='';
+    const keys=['ab','bc','ca'];
+    keys.forEach((k,i)=>{
+      const Vb=r.Vload[k];
+      const I=cdiv(Vb,Zs[i]);
+      rows+='I_'+k+' = V_'+k+' / Z_'+k+' = '+fz(Vb)+' / '+fz(Zs[i])+' = '+fz(I)+'\n';
+    });
+    push('Δ 상전류 (상별 직접 계산)','I_ab = V_ab / Z_ab   (b-c, c-a 동일)', rows.trim());
+    let rows2='';
+    rows2+='I_a = I_ab − I_ca = '+fz(r.Iphase.ab)+' − '+fz(r.Iphase.ca)+' = '+fz(r.I.a)+'\n';
+    rows2+='I_b = I_bc − I_ab = '+fz(r.Iphase.bc)+' − '+fz(r.Iphase.ab)+' = '+fz(r.I.b)+'\n';
+    rows2+='I_c = I_ca − I_bc = '+fz(r.Iphase.ca)+' − '+fz(r.Iphase.bc)+' = '+fz(r.I.c);
+    push('선전류 = Δ 두 상전류의 차','I_a = I_ab − I_ca , I_b = I_bc − I_ab , I_c = I_ca − I_bc', rows2);
+  }
+
+  // ⑥ 중성선 전류
+  if(p.loadY && p.neu!=='none'){
+    push('중성선 전류',
+      'I_n = −(I_a + I_b + I_c)',
+      'I_n = '+fz(r.Ineu)+'   (크기 '+fmt(cabs(r.Ineu),3)+' A)');
+  }
+
+  // ⑦ 평형이면 1상 등가회로로 검산
+  if(bal && p.loadY && cabs(Zl)<1e-12){
+    const ZY = p.loadY ? Zs[0] : cdiv(Zs[0],C(3,0));
+    const I1 = cdiv(pol(cabs(r.src[0]),cang(r.src[0])), ZY);
+    push('검산: 1상 등가회로',
+      '평형이므로 a상만 계산 → |I_L| = V_ph / |Z_Y|',
+      '|I_L| = '+fmt(cabs(r.src[0]),3)+' / '+fmt(cabs(ZY),3)+' = '+fmt(cabs(I1),3)+' A'+
+      '  (앱 계산값 '+fmt(cabs(r.I.a),3)+' A)');
+  }
+
+  // ⑧ 전력
+  push('3상 전력','P = Σ|I|²R ,  Q = Σ|I|²X',
+    'P = '+fmt(r.Sload.re,1)+' W ,  Q = '+fmt(r.Sload.im,1)+' var ,  |S| = '+fmt(cabs(r.Sload),1)+' VA');
+
+  return S.map((s,i)=>'<div class="st"><div class="h">'+s.h+'</div>'+
+    '<div class="fm">'+s.f+'</div>'+
+    '<div class="rs">'+s.rs.replace(/\n/g,'<br>')+'</div></div>').join('');
+}
+
+function drawSchematic(p,r){
+  const W=900,H=360;
+  const yA=110,yB=190,yC=270;
+  let s='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="3상 회로">';
+  const T=(x,y,t,c,sz,a,w)=>'<text x="'+x+'" y="'+y+'" fill="'+(c||'var(--dim)')+'" font-size="'+(sz||11)+
+    '" font-weight="'+(w||400)+'" text-anchor="'+(a||'start')+'">'+t+'</text>';
+  const L=(x1,y1,x2,y2,c,w)=>'<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+(c||'var(--wire)')+'" stroke-width="'+(w||2)+'"/>';
+
+  // 전원
+  const sx=90, ex=200;
+  if(p.srcY){
+    s+=L(sx,190,ex,yA)+L(sx,190,ex,yB)+L(sx,190,ex,yC);
+    s+='<circle cx="'+sx+'" cy="190" r="3.5" fill="var(--txt)"/>';
+    s+=T(sx-14,196,'N','var(--dim)',11);
+  } else {
+    s+=L(ex,yA,ex,yC)+L(ex,yA,sx,190)+L(ex,yC,sx,190);
+    s+='<circle cx="'+(sx)+'" cy="150" r="0"/>';
+  }
+  s+=T(sx-24,84,p.srcY?'Y 전원':'Δ 전원','var(--acc)',12,'start',700);
+
+  // 선로
+  const lx=470;
+  [yA,yB,yC].forEach(y=>{ s+=L(ex,y,lx,y); });
+  s+=T((ex+lx)/2,86,'선로 Z',"var(--dim)",11,'middle');
+  // 전류 화살표
+  ['a','b','c'].forEach((ph,i)=>{
+    const y=[yA,yB,yC][i];
+    const mid=(ex+lx)/2;
+    s+='<path d="M '+(mid-8)+' '+(y-4)+' L '+(mid+8)+' '+(y-4)+' L '+(mid+2)+' '+(y-13)+' z" fill="var(--warn)" opacity="0.9"/>';
+    s+=T(mid+14,y-8,'I'+ph,'var(--warn)',10.5,'start',600);
+  });
+
+  // 부하
+  const ldx=730;
+  if(p.loadY){
+    s+=L(lx,yA,ldx,yA); s+=L(lx,yB,ldx,yB); s+=L(lx,yC,ldx,yC);
+    s+=L(ldx,yA,ldx+70,190)+L(ldx,yB,ldx+70,190)+L(ldx,yC,ldx+70,190);
+    s+='<circle cx="'+(ldx+70)+'" cy="190" r="3.5" fill="var(--txt)"/>';
+    s+=T(ldx+80,196,'n','var(--dim)',11);
+    if(p.neu!=='none'){
+      s+=L(ldx+70,190,ldx+70,330)+L(ldx+70,330,sx,330)+L(sx,330,sx,190);
+      s+='<line x1="'+(ldx+70)+'" y1="330" x2="'+(ldx+70)+'" y2="330" stroke="var(--ok)" stroke-width="3"/>';
+      s+=T(sx+6,346,'중성선','var(--ok)',10.5);
+    } else {
+      s+=T(ldx+80,206,'(중성점 부동)','var(--warn)',10);
+    }
+    s+=T(ldx-6,86,'Y 부하','var(--acc)',12,'start',700);
+  } else {
+    s+=L(lx,yA,ldx,yA); s+=L(lx,yB,ldx,yB); s+=L(lx,yC,ldx,yC);
+    s+=L(ldx,yA,ldx,yB)+L(ldx,yB,ldx,yC)+L(ldx,yC,ldx,yA);
+    s+=T(ldx-6,86,'Δ 부하','var(--acc)',12,'start',700);
+  }
+  // 상 라벨
+  s+=T(ex-24,yA-6,'a','var(--txt)',11); s+=T(ex-24,yB-6,'b','var(--txt)',11); s+=T(ex-24,yC-6,'c','var(--txt)',11);
+  s+='</svg>';
+  return s;
+}
+function bar(){ return 0; }
+
+function drawPhasor(p,r){
+  const W=900,H=430, cx=300, cy=215, R=170;
+  let s='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="페이저도">';
+  const T=(x,y,t,c,sz,a,w)=>'<text x="'+x+'" y="'+y+'" fill="'+(c||'var(--dim)')+'" font-size="'+(sz||11)+
+    '" font-weight="'+(w||400)+'" text-anchor="'+(a||'start')+'">'+t+'</text>';
+
+  // 격자
+  [0.25,0.5,0.75,1].forEach(f=>{
+    s+='<circle cx="'+cx+'" cy="'+cy+'" r="'+(R*f)+'" fill="none" stroke="var(--line)" stroke-width="0.6" opacity="0.7"/>';
+  });
+  s+='<line x1="'+(cx-R)+'" y1="'+cy+'" x2="'+(cx+R)+'" y2="'+cy+'" stroke="var(--line)" stroke-width="0.8"/>';
+  s+='<line x1="'+cx+'" y1="'+(cy-R)+'" x2="'+cx+'" y2="'+(cy+R)+'" stroke="var(--line)" stroke-width="0.8"/>';
+  T(cx+R-8,cy+16,'0°','var(--dim)',10);
+
+  // 전압 (a상 기준 상전압)
+  const Vph=p.VL/Math.sqrt(3);
+  const ang=p.seq>0?[0,-120,120]:[0,120,-120];
+  const vmax=Math.max(Vph,cabs(r.I.a),cabs(r.I.b),cabs(r.I.c));
+  const vs=Math.max(cabs(r.src[0]),1e-9)/R;   // 단위: V per px
+  const is=Math.max(cabs(r.I.a),cabs(r.I.b),cabs(r.I.c))/R;
+
+  const arrow=(mag,deg,color,wid,label)=>{
+    const rad=deg*Math.PI/180;
+    const x=cx+mag*Math.cos(rad), y=cy-mag*Math.sin(rad);
+    let o='<line x1="'+cx+'" y1="'+cy+'" x2="'+x+'" y2="'+y+'" stroke="'+color+'" stroke-width="'+wid+'"/>';
+    const a2=Math.atan2(y-cy,x-cx);
+    o+='<path d="M '+x+' '+y+' L '+(x-9*Math.cos(a2-0.35))+' '+(y-9*Math.sin(a2-0.35))+
+        ' L '+(x-9*Math.cos(a2+0.35))+' '+(y-9*Math.sin(a2+0.35))+' z" fill="'+color+'"/>';
+    o+=T(x+Math.cos(rad)*10, y-Math.sin(rad)*10+4, label, color, 10.5, 'start', 600);
+    return o;
+  };
+  ['a','b','c'].forEach((ph,i)=>{
+    s+=arrow(cabs(r.src[i])/vs, cang(r.src[i]), 'var(--acc)', 1.6, 'V'+ph+'n');
+  });
+  ['a','b','c'].forEach(ph=>{
+    const I=r.I[ph];
+    s+=arrow(cabs(I)/is, cang(I), 'var(--warn)', 2.6, 'I'+ph);
+  });
+  if(r.Ineu && cabs(r.Ineu)>1e-9){
+    s+=arrow(cabs(r.Ineu)/is, cang(r.Ineu), 'var(--ok)', 2.6, 'In');
+  }
+
+  // 범례 + 수치
+  let y0=40;
+  const rows=[['V_a n',fmt(cabs(r.src[0]),2)+' V ∠ '+fmt(cang(r.src[0]),1)+'°'],['I_a',fz(r.I.a)],['I_b',fz(r.I.b)],['I_c',fz(r.I.c)]];
+  if(r.Ineu) rows.push(['I_n',fz(r.Ineu)]);
+  s+=T(600,26,'페이저','var(--txt)',12,'start',700);
+  rows.forEach((rw,i)=>{
+    s+=T(600,y0+i*22,rw[0],'var(--dim)',11);
+    s+=T(650,y0+i*22,rw[1],'var(--txt)',11.5);
+  });
+  s+=T(600,y0+rows.length*22+12,'전압 눈금 1칸 = '+fmt(Vph/4,1)+' V','var(--dim)',10);
+  s+=T(600,y0+rows.length*22+28,'전류 눈금 1칸 = '+fmt(is*R/4,2)+' A','var(--dim)',10);
+  s+='</svg>';
+  return s;
+}
+
+function checksHTML(p,r){
+  const list=[];
+  const sum={re:r.I.a.re+r.I.b.re+r.I.c.re, im:r.I.a.im+r.I.b.im+r.I.c.im};
+  if(p.loadY&&p.neu!=='none'){
+    const In=r.Ineu;
+    const diff=cabs(cadd(sum, In));   // Ia+Ib+Ic+? : 중성선은 반대방향
+    list.push(['KCL: Ia+Ib+Ic+In = 0', diff<1e-6*Math.max(1,cabs(sum)), fmt(diff,6)+' A']);
+  } else {
+    list.push(['KCL: Ia+Ib+Ic = 0', cabs(sum)<1e-6*Math.max(1,cabs(r.I.a)), fmt(cabs(sum),6)+' A']);
+  }
+  const Ptot=r.Sload.re+r.Sline.re;
+  let Ssrc=C(0,0);
+  ['a','b','c'].forEach((ph,i)=>{
+    Ssrc=cadd(Ssrc, cmul(r.src[i], C(r.I[ph].re,-r.I[ph].im)));
+  });
+  list.push(['전력 수지: 전원 P = 부하 + 선로', Math.abs(Ssrc.re-Ptot)<1e-6*Math.max(1,Math.abs(Ptot)),
+    fmt(Ssrc.re,1)+' vs '+fmt(Ptot,1)+' W']);
+
+  const Zs=[p.Za,p.Zb,p.Zc];
+  const bal = cabs(csub(Zs[0],Zs[1]))<1e-9 && cabs(csub(Zs[1],Zs[2]))<1e-9 && p.lr===p.lx&&p.lx===0;
+  if(bal){
+    let want;
+    if(p.loadY){
+      want=cabs(r.src[0])/cabs(Zs[0]);
+    } else {
+      // Δ 부하: Y 등가로 바꿔 계산
+      const Zy=cdiv(Zs[0],C(3,0));
+      want=cabs(r.src[0])/cabs(Zy);
+    }
+    list.push(['평형 공식 |I_L| = V_ph/|Z|', Math.abs(cabs(r.I.a)-want)<1e-6*Math.max(1,want),
+      fmt(cabs(r.I.a),3)+' vs '+fmt(want,3)+' A']);
+  } else {
+    list.push(['평형 공식 검사', true, '불평형/선로 있음 — 해당 없음']);
+  }
+  return list.map(c=>'<div class="chk"><span>'+c[0]+'</span><b class="'+(c[1]?'ok':'bad')+'">'+
+    (c[1]?'✓ ':'! ')+c[2]+'</b></div>').join('');
+}
+
+/* ---------- 이벤트 ---------- */
+document.querySelectorAll('[data-cfg]').forEach(b=>{
+  b.addEventListener('click',()=>{
+    cfg=b.dataset.cfg;
+    document.querySelectorAll('[data-cfg]').forEach(x=>x.classList.toggle('on',x===b));
+    render();
+  });
+});
+$('balBtn').addEventListener('click',()=>{
+  balanced=!balanced;
+  $('balBtn').classList.toggle('on',balanced);
+  $('balBtn').textContent=balanced?'부하 균형':'부하 불평형';
+  ['zbr','zbx','zcr','zcx'].forEach(id=>$(id).disabled=balanced);
+  if(balanced){
+    $('zbr').value=$('zar').value; $('zbx').value=$('zax').value;
+    $('zcr').value=$('zar').value; $('zcx').value=$('zax').value;
+  }
+  render();
+});
+['VL','seq','lr','lx','neu','nr','nx','zar','zax','zbr','zbx','zcr','zcx'].forEach(id=>{
+  $(id).addEventListener('input',()=>{
+    if(balanced && (id==='zar'||id==='zax')){
+      $('zbr').value=$('zar').value; $('zbx').value=$('zax').value;
+      $('zcr').value=$('zar').value; $('zcx').value=$('zax').value;
+    }
+    render();
+  });
+});
+
+function setEx(n){
+  balanced=true; $('balBtn').classList.add('on'); $('balBtn').textContent='부하 균형';
+  ['zbr','zbx','zcr','zcx'].forEach(id=>$(id).disabled=true);
+  const set=(id,v)=>{ $(id).value=v; };
+  if(n===1){
+    cfg='YY'; set('VL',380); set('seq',1); set('lr',0); set('lx',0); set('neu','solid');
+    set('zar',10); set('zax',5); set('zbr',10); set('zbx',5); set('zcr',10); set('zcx',5);
+  } else if(n===2){
+    cfg='YY'; set('VL',Math.round(220*Math.sqrt(3)*1000)/1000); set('seq',1); set('lr',0); set('lx',0); set('neu','solid');
+    balanced=false; $('balBtn').classList.remove('on'); $('balBtn').textContent='부하 불평형';
+    ['zbr','zbx','zcr','zcx'].forEach(id=>$(id).disabled=false);
+    set('zar',10); set('zax',0); set('zbr',0); set('zbx',10); set('zcr',0); set('zcx',-10);
+  } else if(n===3){
+    cfg='YD'; set('VL',220); set('seq',1); set('lr',0); set('lx',0); set('neu','solid');
+    balanced=false; $('balBtn').classList.remove('on'); $('balBtn').textContent='부하 불평형';
+    ['zbr','zbx','zcr','zcx'].forEach(id=>$(id).disabled=false);
+    set('zar',10); set('zax',0); set('zbr',20); set('zbx',0); set('zcr',30); set('zcx',0);
+  } else {
+    cfg='DY'; set('VL',220); set('seq',1); set('lr',0); set('lx',0); set('neu','solid');
+    set('zar',6); set('zax',8); set('zbr',6); set('zbx',8); set('zcr',6); set('zcx',8);
+  }
+  document.querySelectorAll('[data-cfg]').forEach(x=>x.classList.toggle('on',x.dataset.cfg===cfg));
+  render();
+}
+$('ex1').addEventListener('click',()=>setEx(1));
+$('ex2').addEventListener('click',()=>setEx(2));
+$('ex3').addEventListener('click',()=>setEx(3));
+$('ex4').addEventListener('click',()=>setEx(4));
+
+render();
+</script>
+</body>
+</html>

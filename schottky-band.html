@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schottky 밴드 다이어그램 (TYU 9.1)</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#161b22; --line:#2a323d; --txt:#e6edf3;
+    --dim:#9aa7b4; --acc:#58a6ff; --warn:#f0883e; --ok:#3fb950;
+    --ec:#58a6ff; --ev:#bc8cff; --ef:#f0883e; --ei:#8b949e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo",sans-serif;
+       padding:18px 16px 40px;-webkit-text-size-adjust:100%}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+  .ctrls{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+  label{display:block;font-size:12px;color:var(--dim);margin-bottom:5px}
+  input[type=range]{width:100%;accent-color:var(--acc);height:26px}
+  select{width:100%;padding:7px 8px;border-radius:8px;border:1px solid var(--line);
+         background:var(--bg);color:var(--txt);font-size:14px}
+  .val{font-variant-numeric:tabular-nums;font-size:13px;color:var(--txt);margin-top:2px}
+  .vals.masked{filter:blur(7px);opacity:.55;pointer-events:none}
+  .vals{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+  .v{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+  .v .k{font-size:11px;color:var(--dim)}
+  .v .n{font-size:16px;font-variant-numeric:tabular-nums;margin-top:2px}
+  .v .u{font-size:11px;color:var(--dim)}
+  .panels{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media (max-width:760px){ .panels{grid-template-columns:1fr} }
+  svg{width:100%;height:auto;display:block;border-radius:8px;background:var(--bg)}
+  .chk{font-size:12.5px;display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .chk:last-child{border-bottom:0}
+  .chk b{font-weight:600;font-variant-numeric:tabular-nums}
+  .ok{color:var(--ok)} .bad{color:var(--warn)}
+  .badge{display:inline-block;font-size:11.5px;padding:3px 8px;border-radius:999px;
+         border:1px solid var(--warn);color:var(--warn);white-space:nowrap}
+  .badge.good{border-color:var(--ok);color:var(--ok)}
+  .note{font-size:12.5px;color:var(--dim);margin-top:10px}
+  .note b{color:var(--txt)}
+</style>
+</head>
+<body>
+
+<h1>Cr–Si (n-type) Schottky 다이어그램</h1>
+<div class="sub">TYU 9.1 · 300 K · 슬라이드 해설 검산 완료 · 평형 / 역바이어스 비교</div>
+
+<div class="card">
+  <div class="ctrls">
+    <div>
+      <label for="metal">금속 (일함수 φ<sub>m</sub>)</label>
+      <select id="metal">
+        <option value="4.50" selected>Cr · 4.50 V</option>
+        <option value="4.28">Al · 4.28 V</option>
+        <option value="5.10">Pd · 5.10 V</option>
+        <option value="5.65">Pt · 5.65 V</option>
+        <option value="3.90">Ca · 3.90 V (χ보다 작음)</option>
+      </select>
+    </div>
+    <div>
+      <label for="nd">도핑 Nd</label>
+      <input id="nd" type="range" min="14" max="18" step="0.01" value="15.4771">
+      <div class="val" id="ndv"></div>
+    </div>
+    <div>
+      <label for="vr">역바이어스 V<sub>R</sub></label>
+      <input id="vr" type="range" min="0" max="20" step="0.1" value="5">
+      <div class="val" id="vrv"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+    <div style="font-size:13px;font-weight:600">계산값</div>
+    <button id="revealBtn" style="font:inherit;font-size:12.5px;padding:6px 12px;border-radius:8px;
+      border:1px solid var(--acc);background:transparent;color:var(--acc);cursor:pointer">
+      풀이 전 · 수치 가림</button>
+  </div>
+  <div class="vals masked" id="vals"></div>
+  <div id="maskHint" class="note" style="margin-top:8px">
+    풀이를 마친 뒤 “수치 표시”를 누르세요. 지금은 그림만 보입니다.</div>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap">
+    <div style="font-size:13px;font-weight:600">에너지 밴드 비교</div>
+    <div id="scalebadge"></div>
+  </div>
+  <div class="panels" id="panels"></div>
+  <div class="note" id="scalenote"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">일관성 자동 검사</div>
+  <div id="checks"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">그림에서 읽어야 할 불변식</div>
+  <div class="note" style="margin-top:0">
+    · <b>φ<sub>BO</sub>는 V<sub>R</sub>을 바꿔도 그대로</b>입니다. 금속–반도체 계면 장벽은 인가 전압으로 변하지 않습니다.<br>
+    · 변하는 것은 <b>반도체 쪽 밴드 굽힘(V<sub>bi</sub>+V<sub>R</sub>)</b>과 <b>x<sub>n</sub></b>입니다.<br>
+    · E<sub>F</sub> 선을 직접 끄는 방식은 쓰지 않았습니다. E<sub>F</sub> 위치는 <b>도핑의 결과</b>이므로, 도핑을 바꾸면 E<sub>F</sub>가 따라 움직입니다. (자유 변수 3개, 나머지는 계산값)
+  </div>
+</div>
+
+<script>
+const q = 1.6e-19, eps0 = 8.85e-14, epsS = 11.7 * eps0;
+const Nc = 2.8e19, Eg = 1.12, chi = 4.01, kT = 0.0259;
+const $ = id => document.getElementById(id);
+
+function compute(phiM, Nd, VR){
+  const phiBO = phiM - chi;
+  const phin  = kT * Math.log(Nc / Nd);
+  const Vbi   = phiBO - phin;
+  const Vtot  = Vbi + VR;
+  const xn    = Math.sqrt(2 * epsS * Math.max(Vtot, 1e-6) / (q * Nd));
+  const Emax  = q * Nd * xn / epsS;
+  const C     = Math.sqrt(q * epsS * Nd / (2 * Math.max(Vtot, 1e-6)));
+  return { phiBO: phiBO, phin: phin, Vbi: Vbi, Vtot: Vtot, xn: xn,
+           Emax: Emax, C: C, C_from_xn: epsS / xn };
+}
+
+function fmt(v, d){ d = (d === undefined) ? 3 : d;
+  return v.toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d}); }
+
+const SUPS = {'-':'\u207B','0':'\u2070','1':'\u00B9','2':'\u00B2','3':'\u00B3',
+              '4':'\u2074','5':'\u2075','6':'\u2076','7':'\u2077','8':'\u2078','9':'\u2079'};
+function sup(n){ return String(n).split('').map(function(c){ return SUPS[c] || c; }).join(''); }
+function sci(v){
+  if (v === 0) return '0';
+  const e = Math.floor(Math.log10(Math.abs(v)));
+  return (v / Math.pow(10, e)).toFixed(3) + '\u00D710' + sup(e);
+}
+
+function panel(r, VR, title, note, uid){
+  const W = 470, H = 420;
+  const xMetalL = 16, xI = 132, xR = 404;
+  const padT = 62, padB = 88;
+  const plotH = H - padT - padB;
+
+  const EcI = r.phiBO;
+  const EcB = r.phiBO - r.Vtot;
+  const EvB = EcB - Eg, EvI = EcI - Eg;
+  const EiB = EcB - Eg / 2, EiI = EcI - Eg / 2;
+  const EFs = -VR;
+
+  const vals = [EcI, EcB, EvB, EiB, EvI, EiI, EFs, 0];
+  let hi = Math.max.apply(null, vals), lo = Math.min.apply(null, vals);
+  const span0 = Math.max(hi - lo, 0.6);
+  hi += span0 * 0.10; lo -= span0 * 0.05;
+
+  const y = v => padT + (hi - v) / (hi - lo) * plotH;
+  const xBulk = xI + (xR - xI) * 0.70;
+
+  const T = (x, yy, t, col, size, anch, weight) =>
+    '<text x="' + x + '" y="' + yy + '" fill="' + col + '" font-size="' + (size || 11) +
+    '" font-weight="' + (weight || 400) + '" text-anchor="' + (anch || 'start') + '">' + t + '</text>';
+  const tag = (x, yy, t, col) =>
+    '<rect x="' + (x - 3) + '" y="' + (yy - 12) + '" width="' + (t.length * 7 + 6) +
+    '" height="16" fill="var(--bg)" opacity="0.85" rx="3"/>' + T(x, yy, t, col, 11.5, 'start', 600);
+
+  let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" role="img" ' +
+          'aria-label="' + title + ' 에너지 밴드 다이어그램">';
+  s += '<defs>';
+  s += '<pattern id="hatch' + uid + '" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">';
+  s += '<line x1="0" y1="0" x2="0" y2="7" stroke="var(--line)" stroke-width="2.5"/></pattern>';
+  s += '<marker id="ah' + uid + '" markerWidth="7" markerHeight="7" refX="5" refY="2.5" orient="auto">';
+  s += '<path d="M0,0 L5,2.5 L0,5 z" fill="currentColor"/></marker>';
+  s += '<marker id="ahs' + uid + '" markerWidth="7" markerHeight="7" refX="1" refY="2.5" orient="auto">';
+  s += '<path d="M5,0 L0,2.5 L5,5 z" fill="currentColor"/></marker>';
+  s += '</defs>';
+
+  s += T(14, 19, title, 'var(--txt)', 12.5, 'start', 700);
+  s += T(14, 34, note, 'var(--warn)', 10.5);
+
+  s += '<rect x="' + xMetalL + '" y="' + (padT - 8) + '" width="' + (xI - xMetalL) +
+       '" height="' + (plotH + 8) + '" fill="url(#hatch' + uid + ')" opacity="0.5"/>';
+  s += T((xMetalL + xI) / 2, padT - 12, '금속', 'var(--dim)', 10.5, 'middle');
+  s += T(xI + 6, padT - 12, 'n-Si', 'var(--dim)', 10.5);
+  s += '<line x1="' + xI + '" y1="' + (padT - 8) + '" x2="' + xI + '" y2="' + (padT + plotH) +
+       '" stroke="var(--line)" stroke-dasharray="4 4"/>';
+
+  s += '<line x1="' + xMetalL + '" y1="' + y(0) + '" x2="' + xI + '" y2="' + y(0) +
+       '" stroke="var(--ef)" stroke-width="1.6" stroke-dasharray="6 3"/>';
+  s += T(xMetalL + 4, y(0) - 6, 'E_Fm', 'var(--ef)', 10.5);
+
+  s += '<polyline points="' + xI + ',' + y(EcI) + ' ' + xBulk + ',' + y(EcB) + ' ' + xR + ',' + y(EcB) +
+       '" fill="none" stroke="var(--ec)" stroke-width="2.3"/>';
+  s += '<polyline points="' + xI + ',' + y(EvI) + ' ' + xBulk + ',' + y(EvB) + ' ' + xR + ',' + y(EvB) +
+       '" fill="none" stroke="var(--ev)" stroke-width="2.3"/>';
+  s += '<polyline points="' + xI + ',' + y(EiI) + ' ' + xBulk + ',' + y(EiB) + ' ' + xR + ',' + y(EiB) +
+       '" fill="none" stroke="var(--ei)" stroke-width="1.2" stroke-dasharray="3 3"/>';
+
+  s += tag(xI + 28, y(EcI) - 7, 'E_c', 'var(--ec)');
+  s += tag(xI + 8, y(EvI) - 7, 'E_v', 'var(--ev)');
+  if (r.Vtot / Eg <= 1.25) { s += tag(xR - 44, y(EiB) - 7, 'E_i', 'var(--ei)'); }
+
+  s += '<line x1="' + xBulk + '" y1="' + y(EFs) + '" x2="' + xR + '" y2="' + y(EFs) +
+       '" stroke="var(--ef)" stroke-width="1.7"/>';
+  s += tag(xBulk + 5, y(EFs) - 5, 'E_F', 'var(--ef)');
+
+  const stepRaw = (hi - lo) / 5;
+  const mag = Math.pow(10, Math.floor(Math.log10(stepRaw)));
+  const step = [1, 2, 2.5, 5, 10].map(k => k * mag).find(v => v >= stepRaw) || mag * 10;
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) {
+    const yy = y(v);
+    s += '<line x1="' + xR + '" y1="' + yy + '" x2="' + (xR + 5) + '" y2="' + yy + '" stroke="var(--line)"/>';
+    s += T(xR + 8, yy + 3.5, (Math.abs(v) < 1e-9 ? '0' : v.toFixed(step < 0.5 ? 2 : 1)), 'var(--dim)', 9.5);
+  }
+  s += T(xR + 6, padT - 12, 'E(eV)', 'var(--dim)', 9.5);
+
+  if (r.phiBO > 0) {
+    const xb = xI + 10;
+    s += '<line x1="' + xI + '" y1="' + y(EcI) + '" x2="' + (xb + 4) + '" y2="' + y(EcI) +
+         '" stroke="var(--acc)" stroke-width="0.8" opacity="0.55"/>';
+    s += '<line x1="' + xI + '" y1="' + y(0) + '" x2="' + (xb + 4) + '" y2="' + y(0) +
+         '" stroke="var(--acc)" stroke-width="0.8" opacity="0.55"/>';
+    s += '<line x1="' + xb + '" y1="' + y(0) + '" x2="' + xb + '" y2="' + y(EcI) +
+         '" stroke="var(--acc)" stroke-width="1.3" marker-start="url(#ahs' + uid + ')" ' +
+         'marker-end="url(#ah' + uid + ')" color="var(--acc)"/>';
+    s += tag(xb + 9, (y(0) + y(EcI)) / 2 + 4, 'φ_BO=' + fmt(r.phiBO, 3), 'var(--acc)');
+  }
+
+  const xv = xBulk - 26;
+  s += '<line x1="' + xI + '" y1="' + y(EcI) + '" x2="' + (xv + 4) + '" y2="' + y(EcI) +
+       '" stroke="var(--txt)" stroke-width="0.8" stroke-dasharray="2 3" opacity="0.5"/>';
+  s += '<line x1="' + xv + '" y1="' + y(EcI) + '" x2="' + xv + '" y2="' + y(EcB) +
+       '" stroke="var(--txt)" stroke-width="1.1" marker-start="url(#ahs' + uid + ')" ' +
+       'marker-end="url(#ah' + uid + ')" color="var(--txt)" opacity="0.8"/>';
+  s += T(xv - 6, (y(EcI) + y(EcB)) / 2 + 3, 'ΔE_c = ' + fmt(r.Vtot, 2), 'var(--txt)', 10, 'end', 600);
+  s += '<line x1="' + xR + '" y1="' + (padT - 8) + '" x2="' + xR + '" y2="' + (padT + plotH) + '" stroke="var(--line)"/>';
+  const yb = padT + plotH + 22;
+  s += '<line x1="' + xBulk + '" y1="' + (padT - 8) + '" x2="' + xBulk + '" y2="' + yb +
+       '" stroke="var(--dim)" stroke-width="0.9" stroke-dasharray="3 5"/>';
+  s += '<line x1="' + xI + '" y1="' + yb + '" x2="' + xBulk + '" y2="' + yb +
+       '" stroke="var(--dim)" stroke-width="1.2" marker-start="url(#ahs' + uid + ')" ' +
+       'marker-end="url(#ah' + uid + ')" color="var(--dim)"/>';
+  s += T((xI + xBulk) / 2, yb + 15, 'x_n = ' + (r.xn * 1e4).toFixed(2) + ' μm', 'var(--txt)', 11, 'middle', 600);
+
+  s += '</svg>';
+  return s;
+}
+
+function render(){
+  const phiM = parseFloat($('metal').value);
+  const Nd = Math.pow(10, parseFloat($('nd').value));
+  const VR = parseFloat($('vr').value);
+  const r0 = compute(phiM, Nd, 0);
+  const r = compute(phiM, Nd, VR);
+
+  $('ndv').textContent = sci(Nd) + ' cm\u207B\u00B3';
+  $('vrv').textContent = VR.toFixed(1) + ' V';
+
+  const items = [
+    ['φ_BO (금속 장벽)', fmt(r.phiBO, 3), 'V'],
+    ['φ_n = E_c − E_F', fmt(r.phin, 4), 'V'],
+    ['V_bi', fmt(r.Vbi, 4), 'V'],
+    ['V_bi + V_R', fmt(r.Vtot, 3), 'V'],
+    ['x_n', (r.xn * 1e4).toFixed(3), 'μm'],
+    ['|E_max|', sci(r.Emax), 'V/cm'],
+    ['C′', sci(r.C), 'F/cm²'],
+    ['C′ = ε_s/x_n', sci(r.C_from_xn), 'F/cm²']
+  ];
+  $('vals').innerHTML = items.map(function(it){
+    return '<div class="v"><div class="k">' + it[0] + '</div><div class="n">' + it[1] +
+           '</div><div class="u">' + it[2] + '</div></div>';
+  }).join('');
+
+  const comp = r.Vtot / Eg;
+  if (r.phiBO <= 0) {
+    $('panels').innerHTML = '<div style="grid-column:1/-1;padding:26px 18px;border:1px solid var(--line);' +
+      'border-radius:10px;color:var(--warn);font-size:13.5px;line-height:1.7;text-align:center">' +
+      '<b>오믹 접합 (정류성 없음)</b><br>φ_m = ' + fmt(phiM, 2) + ' V ≤ χ_Si = 4.01 V 이므로 φ_BO = ' +
+      fmt(r.phiBO, 3) + ' V 로 장벽이 생기지 않습니다.<br>' +
+      '이 경우 Schottky 정류 모델(V_bi, x_n, C′ 공식)을 적용할 수 없으므로 그림을 그리지 않습니다.</div>';
+    $('scalebadge').innerHTML = '<span class="badge">오믹 접합 · 모델 적용 불가</span>';
+    $('scalenote').innerHTML = 'n형 실리콘에서 φ_m &lt; χ 이면 전자에 대한 장벽이 없어 오믹 접촉이 됩니다. ' +
+      '금속을 Cr/Al/Pd/Pt 로 바꾸면 정류 접합을 볼 수 있습니다.';
+    $('checks').innerHTML = '<div class="chk"><span>φ_BO &gt; 0 (정류성)</span><b class="bad">! 오믹 접합</b></div>';
+    return;
+  }
+  $('panels').innerHTML =
+    panel(r0, 0, '① 평형 (V_R = 0)', '굽힘 ' + fmt(r0.Vtot, 3) + ' eV · 등비율', 'A') +
+    panel(r, VR, '② 역바이어스 V_R = ' + VR.toFixed(1) + ' V',
+          comp > 1.25 ? '굽힘 ' + fmt(r.Vtot, 2) + ' eV · 세로축 압축' : '굽힘 ' + fmt(r.Vtot, 2) + ' eV', 'B');
+
+  $('scalebadge').innerHTML = comp > 1.25
+    ? '<span class="badge">② 세로축 압축 · 굽힘이 Eg의 ' + comp.toFixed(1) + '배</span>'
+    : '<span class="badge good">두 그림 모두 등비율에 가까움</span>';
+
+  $('scalenote').innerHTML = comp > 1.25
+    ? '<b>②는 세로축이 실제 비율이 아닙니다.</b> 밴드 굽힘 ' + fmt(r.Vtot, 3) +
+      ' eV가 밴드갭 1.12 eV의 <b>' + comp.toFixed(2) + '배</b>라서, 등비율로 그리면 실리콘 밴드가 ' +
+      '납작하게 뭉개집니다. 크기는 그림이 아니라 <b>라벨 숫자</b>로 판단하세요. ' +
+      'V_R를 줄이면 ②도 등비율에 가까워집니다.'
+    : '두 그림 모두 밴드갭과 비슷한 세로 비율로 그려졌습니다.';
+
+  const chk = [
+    ['φ_BO 는 V_R 과 무관', Math.abs(r.phiBO - r0.phiBO) < 1e-12, fmt(r.phiBO, 4) + ' V (평형과 동일)'],
+    ['C′ = ε_s / x_n 일치', Math.abs(r.C - r.C_from_xn) / r.C < 1e-9,
+      (Math.abs(r.C - r.C_from_xn) / r.C * 100).toExponential(1) + ' % 차이'],
+    ['정류성 (φ_BO > 0)', r.phiBO > 0, r.phiBO > 0 ? 'Schottky 장벽 있음' : '오믹 접합'],
+    ['V_bi > 0', r.Vbi > 0, fmt(r.Vbi, 4) + ' V'],
+    ['역바이어스 시 x_n 증가', r.xn >= r0.xn,
+      (r0.xn * 1e4).toFixed(3) + ' → ' + (r.xn * 1e4).toFixed(3) + ' μm (' + (r.xn / r0.xn).toFixed(2) + '배)']
+  ];
+  $('checks').innerHTML = chk.map(function(c){
+    return '<div class="chk"><span>' + c[0] + '</span><b class="' + (c[1] ? 'ok' : 'bad') + '">' +
+           (c[1] ? '✓ ' : '! ') + c[2] + '</b></div>';
+  }).join('');
+}
+
+let revealed = false;
+function applyReveal(){
+  const v = document.getElementById('vals');
+  const b = document.getElementById('revealBtn');
+  const m = document.getElementById('maskHint');
+  if (revealed) { v.classList.remove('masked'); b.textContent = '수치 표시됨 · 다시 가리기'; m.style.display = 'none'; }
+  else { v.classList.add('masked'); b.textContent = '풀이 전 · 수치 가림'; m.style.display = 'block'; }
+}
+document.getElementById('revealBtn').addEventListener('click', function(){ revealed = !revealed; applyReveal(); });
+['metal', 'nd', 'vr'].forEach(function(id){ $(id).addEventListener('input', render); });
+render();
+applyReveal();
+</script>
+</body>
+</html>

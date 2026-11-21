@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>테브난 / 노턴 등가 회로 단계별</title>
+<style>
+  :root{ --bg:#0f1216; --panel:#161b22; --line:#2a323d; --txt:#e6edf3; --dim:#9aa7b4;
+         --acc:#58a6ff; --warn:#f0883e; --ok:#3fb950; --red:#f85149; --wire:#8b949e; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+       padding:18px 16px 40px;-webkit-text-size-adjust:100%}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+  .head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .head .t{font-size:13px;font-weight:600}
+  select{width:100%;padding:7px 8px;border-radius:8px;border:1px solid var(--line);
+         background:var(--bg);color:var(--txt);font-size:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+  .fld{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+  .fld label{display:block;font-size:11px;color:var(--dim);margin-bottom:3px}
+  .fld input{width:100%;background:transparent;border:0;color:var(--txt);font:inherit;
+             font-variant-numeric:tabular-nums;outline:none;padding:0}
+  .res{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .v{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+  .v .k{font-size:11px;color:var(--dim)} .v .n{font-size:17px;font-variant-numeric:tabular-nums;margin-top:2px}
+  .v .u{font-size:11px;color:var(--dim)}
+  .v.hi{border-color:var(--acc)}
+  svg{width:100%;max-width:940px;height:auto;display:block;background:var(--bg);border-radius:8px;margin:0 auto}
+  .steps{display:grid;grid-template-columns:1fr;gap:10px}
+  .step{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .step .fh{font-size:13px;font-weight:600;color:var(--acc);margin-bottom:2px}
+  .step .why{font-size:12px;color:var(--dim);margin-bottom:8px}
+  .step svg{max-width:560px;max-height:230px}
+  .chk{font-size:12.5px;display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .chk:last-child{border-bottom:0}
+  .ok{color:var(--ok)} .bad{color:var(--warn)}
+  .note{font-size:12.5px;color:var(--dim);margin-top:10px}
+  .note b{color:var(--txt)}
+  .eq{font-size:13px;color:var(--txt);background:var(--bg);border:1px solid var(--line);
+      border-radius:8px;padding:8px 10px;margin-top:8px;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+
+<h1>테브난 / 노턴 등가 회로 · 단계별 축소</h1>
+<div class="sub">회로를 한 단계씩 쳐내면서 등가 회로까지 · 각 단계의 등가저항이 유지되는지 자동 확인</div>
+
+<div class="card">
+  <div class="grid" style="grid-template-columns:minmax(260px,1.4fr)">
+    <div><label style="font-size:12px;color:var(--dim);margin-bottom:5px;display:block">회로 선택</label>
+      <select id="preset">
+        <option value="0" selected>① 전압원 + 사다리 (R1, R2, R3)</option>
+        <option value="1">② 전류원 + 분배 (R1~R4)</option>
+      </select>
+    </div>
+  </div>
+  <div class="grid" id="params" style="margin-top:12px"></div>
+</div>
+
+<div class="card"><div class="res" id="results"></div></div>
+
+<div class="card">
+  <div class="head"><div class="t">① 원본 회로 (계산된 노드 전압 표시)</div></div>
+  <div id="origPanel"></div>
+  <div class="note" id="origNote"></div>
+</div>
+
+<div class="card">
+  <div class="head"><div class="t">② 등가저항 R_th 구하기 — 전원을 끄고 단계별로 축소</div></div>
+  <div id="deactPanel"></div>
+  <div class="steps" id="stepsPanel" style="margin-top:12px"></div>
+  <div class="note">전압원은 <b>단락</b>, 전류원은 <b>개방</b>합니다. 각 단계 뒤에도 단자에서 본 저항이 그대로인지 매번 다시 계산해 확인합니다.</div>
+</div>
+
+<div class="card">
+  <div class="head"><div class="t">③ 등가 회로 (테브난 · 노턴)</div></div>
+  <div id="eqPanel"></div>
+  <div class="eq" id="eqText"></div>
+</div>
+
+<div class="card">
+  <div class="head"><div class="t">일관성 자동 검사</div></div>
+  <div id="checks"></div>
+</div>
+
+<script>
+/* ================= 회로 데이터 ================= */
+const Vt=null; // 미사용
+const PRESETS=[
+ { name:'전압원 + 사다리',
+   nodes:{ n0:[120,300], n1:[120,100], n2:[430,100], t1:[720,100] },
+   wires:[[120,300,720,300]],
+   els:[
+     {t:'V',a:'n1',b:'n0',key:'v1',name:'V1',val:12,unit:'V',route:[[120,100],[120,300]]},
+     {t:'R',a:'n1',b:'n2',key:'r1',name:'R1',val:4,unit:'Ω',route:[[120,100],[430,100]]},
+     {t:'R',a:'n2',b:'n0',key:'r2',name:'R2',val:6,unit:'Ω',route:[[430,100],[430,300]]},
+     {t:'R',a:'n2',b:'t1',key:'r3',name:'R3',val:3,unit:'Ω',route:[[430,100],[720,100]]}
+   ],
+   tp:'t1', tn:'n0', ref:'n0', tb:[720,300]
+ },
+ { name:'전류원 + 분배',
+   nodes:{ n0:[120,320], n1:[320,120], n2:[620,120], t1:[800,120] },
+   wires:[[120,320,800,320]],
+   els:[
+     {t:'I',a:'n0',b:'n1',key:'i1',name:'I1',val:2,unit:'A',route:[[220,320],[220,120],[320,120]]},
+     {t:'R',a:'n1',b:'n0',key:'r1',name:'R1',val:5,unit:'Ω',route:[[320,120],[320,320]]},
+     {t:'R',a:'n1',b:'n2',key:'r2',name:'R2',val:10,unit:'Ω',route:[[320,120],[620,120]]},
+     {t:'R',a:'n2',b:'n0',key:'r3',name:'R3',val:10,unit:'Ω',route:[[620,120],[620,320]]},
+     {t:'R',a:'n2',b:'t1',key:'r4',name:'R4',val:4,unit:'Ω',route:[[620,120],[800,120]]}
+   ],
+   tp:'t1', tn:'n0', ref:'n0', tb:[800,320]
+ }
+];
+
+let cur=0, vals=null;
+function initVals(i){
+  vals={};
+  PRESETS[i].els.forEach(e=>{ vals[e.key]=e.val; });
+}
+
+/* ================= MNA 해석 ================= */
+function solveCircuit(nodes, els, ref){
+  const list=Object.keys(nodes).filter(n=>n!==ref);
+  const idx={}; list.forEach((n,i)=>idx[n]=i);
+  const vs=els.filter(e=>e.t==='V');
+  const n=list.length+vs.length;
+  const A=[],b=[];
+  for(let i=0;i<n;i++){ A.push(new Array(n).fill(0)); b.push(0); }
+  els.forEach(e=>{
+    if(e.t==='R'){
+      const R=e.val, a=e.a, c=e.b;
+      if(a!==ref){ A[idx[a]][idx[a]]+=1/R; if(c!==ref) A[idx[a]][idx[c]]-=1/R; }
+      if(c!==ref){ A[idx[c]][idx[c]]+=1/R; if(a!==ref) A[idx[c]][idx[a]]-=1/R; }
+    } else if(e.t==='I'){
+      if(e.a!==ref) b[idx[e.a]]-=e.val;
+      if(e.b!==ref) b[idx[e.b]]+=e.val;
+    }
+  });
+  vs.forEach((e,k)=>{
+    const row=list.length+k;
+    if(e.a!==ref){ A[row][idx[e.a]]+=1; A[idx[e.a]][row]+=1; }
+    if(e.b!==ref){ A[row][idx[e.b]]-=1; A[idx[e.b]][row]-=1; }
+    b[row]=e.val;
+  });
+  // gaussian
+  for(let i=0;i<n;i++){
+    let p=i; for(let r=i+1;r<n;r++) if(Math.abs(A[r][i])>Math.abs(A[p][i])) p=r;
+    [A[i],A[p]]=[A[p],A[i]]; [b[i],b[p]]=[b[p],b[i]];
+    if(Math.abs(A[i][i])<1e-14) continue;
+    for(let r=i+1;r<n;r++){ const f=A[r][i]/A[i][i]; if(!f) continue;
+      for(let c=i;c<n;c++) A[r][c]-=f*A[i][c];
+      b[r]-=f*b[i]; }
+  }
+  const x=new Array(n).fill(0);
+  for(let i=n-1;i>=0;i--){
+    if(Math.abs(A[i][i])<1e-14){ x[i]=0; continue; }
+    let s=b[i]; for(let c=i+1;c<n;c++) s-=A[i][c]*x[c];
+    x[i]=s/A[i][i];
+  }
+  const out={}; out[ref]=0; list.forEach((nd,i)=>out[nd]=x[i]);
+  return {v:out, x:out, list:list, idx:idx, nv:vs.length, xa:x};
+}
+
+/* 전원 제거: V는 단락(노드 병합), I는 제거 */
+function deactivate(els){
+  const parent={};
+  const find=x=>{ if(parent[x]===undefined) parent[x]=x;
+    while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
+  const union=(a,b)=>{ const ra=find(a), rb=find(b); if(ra!==rb) parent[ra]=rb; };
+  els.forEach(e=>{ find(e.a); find(e.b); if(e.t==='V') union(e.a,e.b); });
+  const net=[];
+  els.forEach(e=>{ if(e.t==='R'){ net.push({t:'R',a:find(e.a),b:find(e.b),val:e.val,name:e.name,expr:e.name,members:[e.name]}); } });
+  return {net:net, find:find, parent:parent};
+}
+
+function rthTest(els,tp,tn){
+  const d=deactivate(els);
+  const R=find2(d.parent,tn), TP=find2(d.parent,tp);
+  const nodes={}; Object.keys(PRESETS[cur].nodes).forEach(k=>{});
+  const net=d.net.map(e=>({t:'R',a:e.a,b:e.b,val:e.val}));
+  const nodeSet={}; net.forEach(e=>{ nodeSet[e.a]=1; nodeSet[e.b]=1; }); nodeSet[R]=1; nodeSet[TP]=1;
+  const nodesObj={}; Object.keys(nodeSet).forEach(k=>nodesObj[k]=1);
+  const test=net.concat([{t:'I',a:R,b:TP,val:1}]);
+  const sol=solveCircuit(nodesObj,test,R);
+  return sol.v[TP]-sol.v[R];
+}
+function find2(parent,x){ if(parent[x]===undefined) return x;
+  while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; }
+
+/* 축소 단계 */
+function routeOfName(n){ const t=PRESETS[cur].els.find(x=>x.name===n); return t?t.route:null; }
+function reduce(net,tp,tn){
+  net=net.map(e=>({t:'R',a:e.a,b:e.b,val:e.val,expr:e.expr||e.name,members:e.members||[e.name]}));
+  const steps=[];
+  for(let guard=0;guard<40;guard++){
+    let done=false;
+    // 병렬
+    for(let i=0;i<net.length&&!done;i++) for(let j=i+1;j<net.length&&!done;j++){
+      const A=net[i],B=net[j];
+      const same=(A.a===B.a&&A.b===B.b)||(A.a===B.b&&A.b===B.a);
+      if(!same) continue;
+      const R=1/(1/A.val+1/B.val);
+      const expr='('+A.expr+'\u2225'+B.expr+')';
+      steps.push({type:'parallel',
+        title:A.expr+' \u2225 '+B.expr+' = '+fmt(R,4)+' \u03A9',
+        why:'두 저항이 같은 두 노드 사이에 나란히 연결 → 병렬. 전류가 나뉘어 흐르므로 합성은 역수 합.',
+        net:net.filter((_,k)=>k!==i&&k!==j).concat([{t:'R',a:A.a,b:A.b,val:R,expr:expr}])});
+      net=net.filter((_,k)=>k!==i&&k!==j).concat([{t:'R',a:A.a,b:A.b,val:R,expr:expr}]);
+      done=true;
+    }
+    if(done) continue;
+    // 직렬
+    const deg={}; net.forEach(e=>{ deg[e.a]=(deg[e.a]||0)+1; deg[e.b]=(deg[e.b]||0)+1; });
+    for(const k of Object.keys(deg)){
+      if(k===tp||k===tn||deg[k]!==2) continue;
+      const inc=[]; net.forEach((e,i)=>{ if(e.a===k||e.b===k) inc.push(i); });
+      const [i,j]=inc; const A=net[i],B=net[j];
+      const oa=A.a===k?A.b:A.a, ob=B.a===k?B.b:B.a;
+      const R=A.val+B.val;
+      const expr='('+A.expr+'+'+B.expr+')';
+      const mem=A.members.concat(B.members);
+      const nn=net.filter((_,m)=>m!==i&&m!==j).concat([{t:'R',a:oa,b:ob,val:R,expr:expr,members:mem}]);
+      steps.push({type:'series',
+        title:A.expr+' + '+B.expr+' = '+fmt(R,4)+' \u03A9',
+        why:'노드 '+k+' 에 저항 두 개만 연결 → 같은 전류가 흐르는 직렬. 중간 노드가 사라진다.',
+        net:nn});
+      net=nn; done=true; break;
+    }
+    if(done) continue;
+    break;
+  }
+  return {net:net, steps:steps};
+}
+
+/* ================= 그리기 ================= */
+const fmt=(v,d)=>{ d=(d===undefined)?2:d;
+  return v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); };
+
+function resistorPath(x1,y1,x2,y2){
+  const dx=x2-x1, dy=y2-y1, L=Math.hypot(dx,dy)||1;
+  const ux=dx/L, uy=dy/L, px=-uy, py=ux;
+  const n=6, amp=7, seg=L*0.52, start=(L-seg)/2;
+  let d='M '+x1+' '+y1+' L '+(x1+ux*start)+' '+(y1+uy*start);
+  for(let i=1;i<=n;i++){
+    const t=start+seg*i/n, off=(i%2?amp:-amp);
+    d+=' L '+(x1+ux*t+px*off)+' '+(y1+uy*t+py*off);
+  }
+  d+=' L '+(x1+ux*(start+seg))+' '+(y1+uy*(start+seg))+' L '+x2+' '+y2;
+  return d;
+}
+
+function drawCircleSource(x,y,kind,val,name,unit){
+  let s='';
+  s+='<circle cx="'+x+'" cy="'+y+'" r="17" fill="var(--bg)" stroke="var(--acc)" stroke-width="2"/>';
+  if(kind==='V'){
+    s+='<line x1="'+(x-6)+'" y1="'+y+'" x2="'+(x+6)+'" y2="'+y+'" stroke="var(--acc)" stroke-width="1.6"/>';
+    s+='<line x1="'+x+'" y1="'+(y-6)+'" x2="'+x+'" y2="'+(y+6)+'" stroke="var(--acc)" stroke-width="1.6"/>';
+  } else {
+    s+='<line x1="'+x+'" y1="'+(y+7)+'" x2="'+x+'" y2="'+(y-7)+'" stroke="var(--acc)" stroke-width="1.6"/>';
+    s+='<path d="M '+(x-4)+' '+(y-3)+' L '+x+' '+(y-8)+' L '+(x+4)+' '+(y-3)+' z" fill="var(--acc)"/>';
+  }
+  s+='<text x="'+x+'" y="'+(y+32)+'" fill="var(--txt)" font-size="11" text-anchor="middle" font-weight="600">'+
+     name+' = '+fmt(val,2)+' '+unit+'</text>';
+  return s;
+}
+
+function defaultRoute(a,b){
+  const dx=Math.abs(b[0]-a[0]), dy=Math.abs(b[1]-a[1]);
+  if(dx<2||dy<2) return [a,b];
+  return [a,[b[0],a[1]],b];
+}
+
+function drawElement(e, route){
+  // 가장 긴 구간의 중앙에 기호를 놓고, 그 부분만 선을 끊는다
+  let bi=0, bl=-1;
+  for(let i=0;i<route.length-1;i++){
+    const L=Math.hypot(route[i+1][0]-route[i][0], route[i+1][1]-route[i][1]);
+    if(L>bl){ bl=L; bi=i; }
+  }
+  const p=route[bi], q=route[bi+1];
+  const ux=(q[0]-p[0])/bl, uy=(q[1]-p[1])/bl;
+  const symL=Math.min(e.t==='R'?70:60, bl*0.5);
+  const mid=bl/2;
+  const s0=mid-symL/2, s1=mid+symL/2;
+  const A=[p[0]+ux*s0, p[1]+uy*s0], B=[p[0]+ux*s1, p[1]+uy*s1];
+
+  let s='';
+  // 배선(기호 구간 제외)
+  const before=route.slice(0,bi+1).concat([A]);
+  if(before.length>1) s+='<polyline points="'+before.map(o=>o[0]+','+o[1]).join(' ')+'" fill="none" stroke="var(--wire)" stroke-width="2"/>';
+  const after=[B].concat(route.slice(bi+1));
+  if(after.length>1) s+='<polyline points="'+after.map(o=>o[0]+','+o[1]).join(' ')+'" fill="none" stroke="var(--wire)" stroke-width="2"/>';
+
+  const mx=(A[0]+B[0])/2, my=(A[1]+B[1])/2;
+  if(e.t==='R'){
+    s+='<path d="'+resistorPath(A[0],A[1],B[0],B[1])+'" fill="none" stroke="var(--txt)" stroke-width="2"/>';
+    const label=(e.expr||e.name)+' = '+(+e.val.toFixed(3));
+    const nx=-uy, ny=ux;
+    const off=(Math.abs(uy)>0.5)?[nx*26,ny*26]:[0,-16];
+    s+='<rect x="'+(mx+off[0]-label.length*3.3-3)+'" y="'+(my+off[1]-11)+'" width="'+(label.length*6.6+6)+'" height="15" fill="var(--bg)" opacity="0.9" rx="3"/>';
+    s+='<text x="'+(mx+off[0])+'" y="'+(my+off[1])+'" fill="var(--txt)" font-size="10.5" text-anchor="middle">'+label+'</text>';
+  } else {
+    s+=drawCircleSource(mx,my,e.t,e.val,e.name||e.expr,e.unit||(e.t==='V'?'V':'A'));
+  }
+  return s;
+}
+
+function renderCircuit(preset, els, opts){
+  opts=opts||{};
+  const W=900,H=400;
+  const nodes=preset.nodes;
+  const pos={};
+  Object.keys(nodes).forEach(k=>{ pos[k]=[nodes[k][0],nodes[k][1]]; });
+  if(opts.posOverride) Object.keys(opts.posOverride).forEach(k=>pos[k]=opts.posOverride[k]);
+
+  let s='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="회로도">';
+
+  (preset.wires||[]).forEach(w=>{
+    s+='<line x1="'+w[0]+'" y1="'+w[1]+'" x2="'+w[2]+'" y2="'+w[3]+'" stroke="var(--wire)" stroke-width="2"/>';
+  });
+
+  const routeOf=e=>{
+    if(e.route) return e.route;
+    const a=pos[e.a], b=pos[e.b];
+    if(!a||!b) return null;
+    return defaultRoute(a,b);
+  };
+
+  els.forEach(e=>{
+    const rt=routeOf(e);
+    if(!rt) return;
+    if(opts.killSources){
+      if(e.t==='I') return;
+      if(e.t==='V'){
+        s+='<polyline points="'+rt.map(o=>o[0]+','+o[1]).join(' ')+'" fill="none" stroke="var(--ok)" stroke-width="2" stroke-dasharray="6 4"/>';
+        const mid=rt[Math.floor(rt.length/2)];
+        s+='<text x="'+(mid[0]+8)+'" y="'+(mid[1]-6)+'" fill="var(--ok)" font-size="10">단락</text>';
+        return;
+      }
+    }
+    s+=drawElement(e,rt);
+  });
+
+  if(opts.showNodes!==false){
+    Object.keys(pos).forEach(k=>{
+      if(k==='t1') return;
+      const p=pos[k];
+      s+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="3.5" fill="var(--txt)"/>';
+    });
+  }
+
+  const pt=pos[preset.tp], tb=preset.tb;
+  s+='<circle cx="'+pt[0]+'" cy="'+pt[1]+'" r="5" fill="var(--bg)" stroke="var(--warn)" stroke-width="2"/>';
+  s+='<text x="'+(pt[0]+7)+'" y="'+(pt[1]-8)+'" fill="var(--warn)" font-size="11" font-weight="600">A</text>';
+  s+='<circle cx="'+tb[0]+'" cy="'+tb[1]+'" r="5" fill="var(--bg)" stroke="var(--warn)" stroke-width="2"/>';
+  s+='<text x="'+(tb[0]+8)+'" y="'+(tb[1]+4)+'" fill="var(--warn)" font-size="11" font-weight="600">B</text>';
+
+  if(opts.vlabel){
+    Object.keys(pos).forEach(k=>{
+      if(k==='t1'||k===preset.ref) return;
+      if(opts.vlabel[k]===undefined) return;
+      const p=pos[k];
+      s+='<text x="'+p[0]+'" y="'+(p[1]-11)+'" fill="var(--acc)" font-size="10.5" text-anchor="middle">'+
+         fmt(opts.vlabel[k],2)+' V</text>';
+    });
+  }
+  s+='</svg>';
+  return s;
+}
+
+/* ================= 계산 ================= */
+function calc(){
+  const P=PRESETS[cur];
+  const nodes={}; Object.keys(P.nodes).forEach(k=>nodes[k]=1);
+  const els=P.els.map(e=>({t:e.t,a:e.a,b:e.b,val:vals[e.key],name:e.name,unit:e.unit,key:e.key,route:e.route}));
+  const sol=solveCircuit(nodes,els,P.ref);
+  const Voc=sol.v[P.tp]-sol.v[P.tn];
+
+  // 단락전류: 단자 사이 0V 전원 추가
+  const els2=els.concat([{t:'V',a:P.tp,b:P.tn,val:0}]);
+  const sol2=solveCircuit(nodes,els2,P.ref);
+  const Isc=sol2.xa[sol2.list.length+(sol2.nv-1)];   // 마지막 V 전원의 전류
+
+  const Rth=V1s(RthTestWrap(els,P));
+  return {P:P,els:els,sol:sol,Voc:Voc,Isc:Isc,Rth:Rth};
+}
+function V1s(x){ return x; }
+function RthTestWrap(els,P){ return rthTest(els,P.tp,P.tn); }
+
+/* ================= 렌더 ================= */
+function render(){
+  const P=PRESETS[cur];
+  // 파라미터
+  const ph=document.getElementById('params');
+  ph.innerHTML=P.els.map(e=>
+    '<div class="fld"><label>'+e.name+' ('+e.unit+')</label>'+
+    '<input type="number" step="any" data-key="'+e.key+'" value="'+vals[e.key]+'"></div>').join('');
+  ph.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('input',()=>{
+      const v=parseFloat(inp.value);
+      if(isFinite(v)){ vals[inp.dataset.key]=v; render(); }
+    });
+  });
+
+  const r=calc();
+  const els=r.els;
+
+  document.getElementById('results').innerHTML=[
+    ['테브난 전압 V_oc',fmt(r.Voc,4),'V',true],
+    ['테브난 저항 R_th',fmt(r.Rth,4),'Ω',true],
+    ['단락전류 I_sc',fmt(r.Isc,4),'A',false],
+    ['I_sc = V_oc / R_th',fmt(Math.abs(r.Isc)>1e-12?r.Voc/r.Isc:Infinity,4),'Ω (검산)',false],
+    ['노턴 전류 I_N',fmt(r.Voc/r.Rth,4),'A',false],
+    ['최대 전력 P_max',fmt(r.Voc*r.Voc/(4*r.Rth),4),'W',false]
+  ].map(x=>'<div class="v'+(x[3]?' hi':'')+'"><div class="k">'+x[0]+'</div><div class="n">'+x[1]+
+    '</div><div class="u">'+x[2]+'</div></div>').join('');
+
+  // 원본
+  document.getElementById('origPanel').innerHTML=renderCircuit(P,els,{vlabel:r.sol.v});
+  const vt=Object.keys(P.nodes).filter(k=>k!=='t1'&&k!==P.ref).map(k=>k+' = '+fmt(r.sol.v[k]||0,2)+' V').join(', ');
+  document.getElementById('origNote').innerHTML=
+    '단자를 <b>개방</b>한 상태의 노드 전압: '+vt+'. 개방이므로 A–B 사이에는 전류가 흐르지 않고, '+
+    '<b>V_oc = V(A) − V(B) = '+fmt(r.Voc,3)+' V</b> 입니다.';
+
+  // 전원 제거 회로
+  const d=deactivate(els);
+  document.getElementById('deactPanel').innerHTML=renderCircuit(P,els,{showNodes:true,killSources:true});
+  document.getElementById('deactPanel').insertAdjacentHTML('beforeend',
+    '<div class="note" style="text-align:center">V1 → 단락, 전류원 → 개방. 남은 저항만으로 R_th = '+fmt(r.Rth,4)+' Ω</div>');
+
+  // 단계
+  const red=reduce(d.net,P.tp,P.tn);
+  let sh='';
+  red.steps.forEach((st,i)=>{
+    let running='';
+    try{
+      const test=RthOfNet(st.net,P);
+      running='이 단계 후 R = '+fmt(test,4)+' Ω'+(Math.abs(test-r.Rth)<1e-6?' ✓ 유지':' ⚠ 변함');
+    }catch(e){ running='계산 불가'; }
+    sh+='<div class="step"><div class="fh">'+(i+1)+'. '+st.title+'</div>'+
+        '<div class="why">'+st.why+'</div>'+
+        ((st.net.length===1)?drawTwoTerminal(st.net[0].val,st.net[0].expr):renderCircuit(P,st.net.map(e=>{const rt=routeOfName((e.members||[])[0]); return {t:'R',a:e.a,b:e.b,val:e.val,expr:e.expr,route:rt||undefined};}),{showNodes:false}))+
+        '<div class="note" style="text-align:center">'+running+'</div></div>';
+  });
+  if(!red.steps.length) sh='<div class="note">이미 단순한 회로입니다.</div>';
+  document.getElementById('stepsPanel').innerHTML=sh;
+
+  // 등가 회로
+  document.getElementById('eqPanel').innerHTML=drawEquivalent(r);
+  document.getElementById('eqText').innerHTML=
+    '테브난: <b>'+fmt(r.Voc,3)+' V</b> 직렬 <b>'+fmt(r.Rth,3)+' Ω</b> · '+
+    '노턴: <b>'+fmt(r.Voc/r.Rth,3)+' A</b> 병렬 <b>'+fmt(r.Rth,3)+' Ω</b> · '+
+    '부하 R_L = R_th 일 때 최대전력 <b>'+fmt(r.Voc*r.Voc/(4*r.Rth),3)+' W</b>';
+
+  // 검사
+  const chk=[
+    ['V_oc / I_sc = R_th', Math.abs(r.Isc)>1e-12 && Math.abs(r.Voc/r.Isc-r.Rth)<1e-6,
+      fmt(Math.abs(r.Isc)>1e-12?r.Voc/r.Isc:NaN,4)+' vs '+fmt(r.Rth,4)],
+    ['단계 축소가 같은 R_th로 도달', red.net.length===1 && Math.abs(red.net[0].val-r.Rth)<1e-6,
+      fmt(red.net.length===1?red.net[0].val:NaN,4)+' Ω'],
+    ['각 단계에서 R 값 유지', red.steps.every(st=>{ try{ return Math.abs(RthOfNet(st.net,P)-r.Rth)<1e-6; }catch(e){ return false; } }),
+      red.steps.length+'단계'],
+    ['테브난·노턴이 같은 소자', Math.abs(r.Voc/r.Rth-r.Voc/r.Rth)<1e-9, 'I_N = V_oc/R_th']
+  ];
+  document.getElementById('checks').innerHTML=chk.map(c=>'<div class="chk"><span>'+c[0]+
+    '</span><b class="'+(c[1]?'ok':'bad')+'">'+(c[1]?'✓ ':'! ')+c[2]+'</b></div>').join('');
+}
+
+function RthOfNet(net,P){
+  const nodes={}; net.forEach(e=>{ nodes[e.a]=1; nodes[e.b]=1; });
+  nodes[P.tp]=1; nodes[P.tn]=1;
+  const ref=P.tn;
+  const test=net.map(e=>({t:'R',a:e.a,b:e.b,val:e.val})).concat([{t:'I',a:ref,b:P.tp,val:1}]);
+  const sol=solveCircuit(nodes,test,ref);
+  return sol.v[P.tp]-sol.v[ref];
+}
+
+function drawTwoTerminal(val,expr){
+  const W=560,H=170;
+  let s='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="2단자 저항">';
+  s+='<line x1="120" y1="110" x2="200" y2="110" stroke="var(--wire)" stroke-width="2"/>';
+  s+='<path d="'+resistorPath(200,110,360,110)+'" fill="none" stroke="var(--txt)" stroke-width="2"/>';
+  s+='<line x1="360" y1="110" x2="440" y2="110" stroke="var(--wire)" stroke-width="2"/>';
+  s+='<text x="280" y="92" fill="var(--txt)" font-size="11" text-anchor="middle">'+expr+' = '+(+val.toFixed(3))+' \u03A9</text>';
+  s+='<circle cx="440" cy="110" r="5" fill="var(--bg)" stroke="var(--warn)" stroke-width="2"/>';
+  s+='<text x="450" y="104" fill="var(--warn)" font-size="11" font-weight="600">A</text>';
+  s+='<circle cx="120" cy="110" r="5" fill="var(--bg)" stroke="var(--warn)" stroke-width="2"/>';
+  s+='<text x="98" y="104" fill="var(--warn)" font-size="11" font-weight="600">B</text>';
+  s+='</svg>';
+  return s;
+}
+
+function drawEquivalent(r){
+  const W=900,H=260;
+  let s='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="등가회로">';
+  // 테브난
+  const y1=110;
+  s+='<text x="40" y="40" fill="var(--acc)" font-size="13" font-weight="700">테브난 등가</text>';
+  s+='<line x1="60" y1="'+(y1+60)+'" x2="380" y2="'+(y1+60)+'" stroke="var(--wire)" stroke-width="2"/>';
+  s+='<line x1="60" y1="'+(y1-60)+'" x2="150" y2="'+(y1-60)+'" stroke="var(--wire)" stroke-width="2"/>';
+  s+='<circle cx="150" cy="'+y1+'" r="17" fill="var(--bg)" stroke="var(--acc)" stroke-width="2"/>';
+  s+='<line x1="144" y1="'+y1+'" x2="156" y2="'+y1+'" stroke="var(--acc)" stroke-width="1.6"/>';
+  s+='<line x1="150" y1="'+(y1-6)+'" x2="150" y2="'+(y1+6)+'" stroke="var(--acc)" stroke-width="1.6"/>';
+  s+='<text x="150" y="'+(y1-26)+'" fill="var(--txt)" font-size="11" text-anchor="middle">V_th = '+fmt(r.Voc,3)+' V</text>';
+  s+='<line x1="150" y1="'+(y1+60)+'" x2="150" y2="'+(y1+17)+'" stroke="var(--wire)" stroke-width="2"/>';
+  s+='<path d="'+resistorPath(150,y1+60,300,y1+60)+'" fill="none" stroke="var(--txt)" stroke-width="2"/>';
+  s+='<text x="225" y="'+(y1+50)+'" fill="var(--txt)" font-size="11" text-anchor="middle">R_th = '+fmt(r.Rth,3)+' Ω</text>';
+  s+='<line x1="300" y1="'+(y1+60)+'" x2="380" y2="'+(y1+60)+'" stroke="var(--wire)" stroke-width="2"/>';
+  s+='<line x1="300" y1="'+(y1-60)+'" x2="380" y2="'+(y1-60)+'" stroke="var(--wire)" stroke-width="2"/>';
+  s+='<line x1="300" y1="'+(y1-60)+'" x2="300" y2="'+(y1+60)+'" stroke="var(--wire)" stroke-width="2"/>';
+  s+='<circle cx="380" cy="'+(y1-60)+'" r="4.5" fill="var(--bg)" stroke="var(--warn)" stroke-width="2"/>';
+  s+='<circle cx="380" cy="'+(y1+60)+'" r="4.5" fill="var(--bg)" stroke="var(--warn)" stroke-width="2"/>';
+  s+='<text x="390" y="'+(y1-62)+'" fill="var(--warn)" font-size="11">+</text>';
+  s+='<text x="390" y="'+(y1+64)+'" fill="var(--warn)" font-size="11">−</text>';
+
+  // 노턴
+  s+='<text x="500" y="40" fill="var(--acc)" font-size="13" font-weight="700">노턴 등가</text>';
+  const y2=110, x0=520;
+  s+='<line x1="'+(x0)+'" y1="'+(y2-60)+'" x2="'+(x0+260)+'" y2="'+(y2-60)+'" stroke="var(--wire)" stroke-width="2"/>';
+  s+='<line x1="'+(x0)+'" y1="'+(y2+60)+'" x2="'+(x0+260)+'" y2="'+(y2+60)+'" stroke="var(--wire)" stroke-width="2"/>';
+  s+='<line x1="'+(x0+60)+'" y1="'+(y2-60)+'" x2="'+(x0+60)+'" y2="'+(y2-24)+'" stroke="var(--wire)" stroke-width="2"/>';
+  s+='<circle cx="'+(x0+60)+'" cy="'+(y2-7)+'" r="17" fill="var(--bg)" stroke="var(--acc)" stroke-width="2"/>';
+  s+='<line x1="'+(x0+60)+'" y1="'+(y2-14)+'" x2="'+(x0+60)+'" y2="'+(y2)+'" stroke="var(--acc)" stroke-width="1.6"/>';
+  s+='<path d="M '+(x0+56)+' '+(y2+1)+' L '+(x0+60)+' '+(y2-4)+' L '+(x0+64)+' '+(y2+1)+' z" fill="var(--acc)"/>';
+  s+='<line x1="'+(x0+60)+'" y1="'+(y2+10)+'" x2="'+(x0+60)+'" y2="'+(y2+60)+'" stroke="var(--wire)" stroke-width="2"/>';
+  s+='<text x="'+(x0+90)+'" y="'+(y2-2)+'" fill="var(--txt)" font-size="11">I_N = '+fmt(r.Voc/r.Rth,3)+' A</text>';
+  s+='<line x1="'+(x0+180)+'" y1="'+(y2-60)+'" x2="'+(x0+180)+'" y2="'+(y2-24)+'" stroke="var(--wire)" stroke-width="2"/>';
+  s+='<path d="'+resistorPath(x0+180,y2-24,x0+180,y2+24)+'" fill="none" stroke="var(--txt)" stroke-width="2"/>';
+  s+='<line x1="'+(x0+180)+'" y1="'+(y2+24)+'" x2="'+(x0+180)+'" y2="'+(y2+60)+'" stroke="var(--wire)" stroke-width="2"/>';
+  s+='<text x="'+(x0+190)+'" y="'+(y2+4)+'" fill="var(--txt)" font-size="11">R_N = '+fmt(r.Rth,3)+' Ω</text>';
+  s+='<circle cx="'+(x0+260)+'" cy="'+(y2-60)+'" r="4.5" fill="var(--bg)" stroke="var(--warn)" stroke-width="2"/>';
+  s+='<circle cx="'+(x0+260)+'" cy="'+(y2+60)+'" r="4.5" fill="var(--bg)" stroke="var(--warn)" stroke-width="2"/>';
+  s+='<text x="'+(x0+270)+'" y="'+(y2-62)+'" fill="var(--warn)" font-size="11">+</text>';
+  s+='<text x="'+(x0+270)+'" y="'+(y2+64)+'" fill="var(--warn)" font-size="11">−</text>';
+  s+='</svg>';
+  return s;
+}
+
+document.getElementById('preset').addEventListener('change',e=>{
+  cur=parseInt(e.target.value,10); initVals(cur); render();
+});
+initVals(0);
+render();
+</script>
+</body>
+</html>

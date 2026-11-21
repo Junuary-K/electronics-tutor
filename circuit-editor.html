@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>회로 그리기 · 테브난/노턴</title>
+<style>
+  :root{ --bg:#0f1216; --panel:#161b22; --line:#2a323d; --txt:#e6edf3; --dim:#9aa7b4;
+         --acc:#58a6ff; --warn:#f0883e; --ok:#3fb950; --red:#f85149; --wire:#8b949e; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+       padding:16px 14px 40px;-webkit-text-size-adjust:100%}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .chip{font:inherit;font-size:13px;padding:7px 12px;border-radius:8px;cursor:pointer;
+        border:1px solid var(--line);background:var(--bg);color:var(--txt)}
+  .chip.on{border-color:var(--acc);color:var(--acc);font-weight:700}
+  .chip.danger{border-color:var(--red);color:var(--red)}
+  .chip.go{border-color:var(--ok);color:var(--ok)}
+  input[type=number]{width:96px;background:var(--bg);border:1px solid var(--line);border-radius:8px;
+        color:var(--txt);font:inherit;font-size:14px;padding:6px 8px}
+  .hint{font-size:12.5px;color:var(--dim);margin-top:8px}
+  .hint b{color:var(--txt)}
+  svg{width:100%;height:auto;display:block;background:var(--bg);border-radius:8px;touch-action:none}
+  .res{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:9px}
+  .v{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+  .v .k{font-size:11px;color:var(--dim)} .v .n{font-size:16px;font-variant-numeric:tabular-nums}
+  .v.hi{border-color:var(--acc)}
+  .chk{font-size:12.5px;display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .chk:last-child{border-bottom:0}
+  .ok{color:var(--ok)} .bad{color:var(--warn)}
+  .steps{display:grid;gap:9px}
+  .step{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+  .step .fh{font-size:12.5px;font-weight:600;color:var(--acc)}
+  .step .why{font-size:11.5px;color:var(--dim);margin:2px 0 6px}
+  .step svg{max-width:520px;margin:0 auto}
+  .sel{font-size:12.5px;color:var(--dim)}
+  .sel b{color:var(--acc)}
+</style>
+</head>
+<body>
+
+<h1>회로 그리기 · 테브난 / 노턴</h1>
+<div class="sub">점에서 점으로 드래그해 소자를 놓고, 값을 직접 입력합니다. A/B 단자를 정하면 등가회로가 계산됩니다.</div>
+
+<div class="card">
+  <div class="toolbar">
+    <button class="chip on" data-tool="R">저항 R</button>
+    <button class="chip" data-tool="V">전압원 V</button>
+    <button class="chip" data-tool="I">전류원 I</button>
+    <button class="chip" data-tool="W">도선 W</button>
+    <span style="width:8px"></span>
+    <label style="font-size:12px;color:var(--dim)">값</label>
+    <input id="valIn" type="number" step="any" value="10">
+    <span id="unitLbl" style="font-size:12px;color:var(--dim)">Ω</span>
+  </div>
+  <div class="toolbar" style="margin-top:10px">
+    <button class="chip go" id="setA">이 점을 A 단자로</button>
+    <button class="chip go" id="setB">이 점을 B 단자로</button>
+    <button class="chip" id="flip">방향 반전</button>
+    <button class="chip danger" id="delSel">선택 삭제</button>
+    <button class="chip danger" id="clearAll">전체 지우기</button>
+    <span style="width:8px"></span>
+    <button class="chip" id="load1">샘플 ①</button>
+    <button class="chip" id="load2">샘플 ②</button>
+  </div>
+  <div class="hint" id="hint">
+    <b>점에서 다른 점으로 드래그</b>하면 소자가 놓입니다. 소자를 누르면 선택되어 값 수정·삭제가 됩니다.
+    빈 점을 누르면 그 점이 선택됩니다(A/B 단자 지정용). <b>도선(W)</b>은 지나가는 점을 모두 연결합니다.
+  </div>
+  <div class="sel" id="selInfo" style="margin-top:8px"></div>
+</div>
+
+<div class="card">
+  <div id="canvasWrap"></div>
+  <div class="hint" id="warnLine" style="color:var(--warn)"></div>
+</div>
+
+<div class="card"><div class="res" id="results"></div></div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">단계별 축소 (전원을 끄고 R_th 구하기)</div>
+  <div class="steps" id="stepsPanel"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">일관성 자동 검사</div>
+  <div id="checks"></div>
+</div>
+
+<script>
+/* ---------------- 상태 ---------------- */
+const STEP=40, MARGIN=44, COLS=18, ROWS=12;
+const W=COLS*STEP+MARGIN*2, H=ROWS*STEP+MARGIN*2;
+let tool='R', elements=[], termA=null, termB=null, sel=null, dragFrom=null, dragTo=null;
+let seq=1;
+
+const key=p=>p[0]+','+p[1];
+const gx=i=>MARGIN+i*STEP, gy=j=>MARGIN+j*STEP;
+const fmt=(v,d)=>{ d=(d===undefined)?3:d;
+  return v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); };
+const fmtS=v=>{ const a=Math.abs(v);
+  if(a!==0&&(a<0.01||a>=10000)){
+    const e=Math.floor(Math.log10(a));
+    const SUPS={'-':'\u207B','0':'\u2070','1':'\u00B9','2':'\u00B2','3':'\u00B3','4':'\u2074','5':'\u2075','6':'\u2076','7':'\u2077','8':'\u2078','9':'\u2079'};
+    return (v/Math.pow(10,e)).toFixed(2)+'\u00D710'+String(e).split('').map(c=>SUPS[c]||c).join('');
+  }
+  return String(+v.toFixed(4)); };
+
+/* ---------------- 노드 병합 ---------------- */
+function buildNodes(els){
+  const parent={};
+  const find=k=>{ if(!(k in parent)) parent[k]=k;
+    while(parent[k]!==k){ parent[k]=parent[parent[k]]; k=parent[k]; } return k; };
+  const union=(a,b)=>{ const ra=find(a),rb=find(b); if(ra!==rb) parent[ra]=rb; };
+
+  els.forEach(e=>{ find(key(e.p1)); find(key(e.p2)); });
+  els.filter(e=>e.type==='W').forEach(e=>{
+    const [i1,j1]=e.p1,[i2,j2]=e.p2;
+    if(j1===j2){ const s=Math.min(i1,i2), t=Math.max(i1,i2);
+      for(let i=s;i<t;i++) union(i+','+j1,(i+1)+','+j1); }
+    else if(i1===i2){ const s=Math.min(j1,j2), t=Math.max(j1,j2);
+      for(let j=s;j<t;j++) union(i1+','+j,(i1)+','+(j+1)); }
+    else union(key(e.p1),key(e.p2));
+  });
+  const map={}; Object.keys(parent).forEach(k=>map[k]=find(k));
+  return {map:map, find:find};
+}
+
+function resolved(els){
+  const {map}=buildNodes(els);
+  const out=[];
+  els.forEach(e=>{
+    const a=map[key(e.p1)]||key(e.p1), b=map[key(e.p2)]||key(e.p2);
+    if(e.type==='W') return;
+    out.push({t:e.type, a:a, b:b, val:e.val, id:e.id, p1:e.p1, p2:e.p2, name:e.name});
+  });
+  return out;
+}
+
+/* ---------------- MNA ---------------- */
+function solve(nodes, els, ref){
+  const list=Object.keys(nodes).filter(n=>n!==ref);
+  const idx={}; list.forEach((n,i)=>idx[n]=i);
+  const vs=els.filter(e=>e.t==='V');
+  const n=list.length+vs.length;
+  if(n===0) return {v:{},xa:[]};
+  const A=[],b=[];
+  for(let i=0;i<n;i++){ A.push(new Array(n).fill(0)); b.push(0); }
+  els.forEach(e=>{
+    if(e.t==='R'){
+      const R=e.val||1e-9;
+      if(e.a!==ref){ A[idx[e.a]][idx[e.a]]+=1/R; if(e.b!==ref&&idx[e.b]!==undefined) A[idx[e.a]][idx[e.b]]-=1/R; }
+      if(e.b!==ref){ A[idx[e.b]][idx[e.b]]+=1/R; if(e.a!==ref&&idx[e.a]!==undefined) A[idx[e.b]][idx[e.a]]-=1/R; }
+    } else if(e.t==='I'){
+      if(e.a!==ref&&idx[e.a]!==undefined) b[idx[e.a]]-=e.val;
+      if(e.b!==ref&&idx[e.b]!==undefined) b[idx[e.b]]+=e.val;
+    }
+  });
+  vs.forEach((e,k)=>{
+    const row=list.length+k;
+    if(e.a!==ref){ A[row][idx[e.a]]+=1; A[idx[e.a]][row]+=1; }
+    if(e.b!==ref){ A[row][idx[e.b]]-=1; A[idx[e.b]][row]-=1; }
+    b[row]=e.val;
+  });
+  for(let i=0;i<n;i++){
+    let p=i; for(let r=i+1;r<n;r++) if(Math.abs(A[r][i])>Math.abs(A[p][i])) p=r;
+    const tA=A[i]; A[i]=A[p]; A[p]=tA; const tb=b[i]; b[i]=b[p]; b[p]=tb;
+    if(Math.abs(A[i][i])<1e-13) continue;
+    for(let r=i+1;r<n;r++){ const f=A[r][i]/A[i][i]; if(!f) continue;
+      for(let c=i;c<n;c++) A[r][c]-=f*A[i][c];
+      b[r]-=f*b[i]; }
+  }
+  const x=new Array(n).fill(0);
+  for(let i=n-1;i>=0;i--){
+    if(Math.abs(A[i][i])<1e-13){ x[i]=0; continue; }
+    let s=b[i]; for(let c=i+1;c<n;c++) s-=A[i][c]*x[c];
+    x[i]=s/A[i][i];
+  }
+  const v={}; v[ref]=0; list.forEach((nd,i)=>v[nd]=x[i]);
+  return {v:v, xa:x, list:list};
+}
+
+function deactivate(els){
+  const parent={};
+  const find=k=>{ if(!(k in parent)) parent[k]=k;
+    while(parent[k]!==k){ parent[k]=parent[parent[k]]; k=parent[k]; } return k; };
+  const union=(a,b)=>{ const ra=find(a),rb=find(b); if(ra!==rb) parent[ra]=rb; };
+  els.forEach(e=>{ find(e.a); find(e.b); if(e.t==='V') union(e.a,e.b); });
+  const net=[];
+  els.forEach(e=>{ if(e.t==='R') net.push({t:'R',a:find(e.a),b:find(e.b),val:e.val,name:e.name}); });
+  return {net:net, find:find};
+}
+
+function rthOf(net, tp, tn){
+  const nodes={}; net.forEach(e=>{ nodes[e.a]=1; nodes[e.b]=1; }); nodes[tp]=1; nodes[tn]=1;
+  const test=net.map(e=>({t:'R',a:e.a,b:e.b,val:e.val})).concat([{t:'I',a:tn,b:tp,val:1}]);
+  const sol=solve(nodes,test,tn);
+  return (sol.v[tp]||0)-(sol.v[tn]||0);
+}
+
+/* ---------------- 축소 ---------------- */
+function reduce(net,tp,tn){
+  net=net.map(e=>({t:'R',a:e.a,b:e.b,val:e.val,expr:e.expr||('R'+e.val)}));
+  const steps=[];
+  for(let guard=0;guard<60;guard++){
+    let done=false;
+    for(let i=0;i<net.length&&!done;i++) for(let j=i+1;j<net.length&&!done;j++){
+      const A=net[i],B=net[j];
+      const same=(A.a===B.a&&A.b===B.b)||(A.a===B.b&&A.b===B.a);
+      if(!same) continue;
+      const R=1/(1/A.val+1/B.val);
+      const merged={t:'R',a:A.a,b:A.b,val:R,expr:'('+A.expr+'\u2225'+B.expr+')'};
+      const nn=net.filter((_,k)=>k!==i&&k!==j).concat([merged]);
+      steps.push({title:A.expr+' \u2225 '+B.expr+' = '+fmt(R,4)+' \u03A9',
+        why:'두 저항이 같은 두 점 사이 → 병렬', net:nn});
+      net=nn; done=true;
+    }
+    if(done) continue;
+    const deg={}; net.forEach(e=>{ deg[e.a]=(deg[e.a]||0)+1; deg[e.b]=(deg[e.b]||0)+1; });
+    for(const k of Object.keys(deg)){
+      if(k===tp||k===tn||deg[k]!==2) continue;
+      const inc=[]; net.forEach((e,i)=>{ if(e.a===k||e.b===k) inc.push(i); });
+      const [i,j]=inc, A=net[i], B=net[j];
+      const oa=A.a===k?A.b:A.a, ob=B.a===k?B.b:B.a;
+      const R=A.val+B.val;
+      const merged={t:'R',a:oa,b:ob,val:R,expr:'('+A.expr+'+'+B.expr+')'};
+      const nn=net.filter((_,m)=>m!==i&&m!==j).concat([merged]);
+      steps.push({title:A.expr+' + '+B.expr+' = '+fmt(R,4)+' \u03A9',
+        why:'중간 점에 저항 두 개만 → 직렬', net:nn});
+      net=nn; done=true; break;
+    }
+    if(done) continue;
+    break;
+  }
+  return {net:net, steps:steps};
+}
+
+/* ---------------- 그리기 ---------------- */
+function resistorPath(x1,y1,x2,y2){
+  const dx=x2-x1, dy=y2-y1, L=Math.hypot(dx,dy)||1;
+  const ux=dx/L, uy=dy/L, px=-uy, py=ux;
+  const seg=Math.min(56,L*0.6), start=(L-seg)/2, n=6, amp=6;
+  let d='M '+x1+' '+y1+' L '+(x1+ux*start)+' '+(y1+uy*start);
+  for(let i=1;i<=n;i++){
+    const t=start+seg*i/n, off=(i%2?amp:-amp);
+    d+=' L '+(x1+ux*t+px*off)+' '+(y1+uy*t+py*off);
+  }
+  d+=' L '+(x1+ux*(start+seg))+' '+(y1+uy*(start+seg))+' L '+x2+' '+y2;
+  return d;
+}
+
+function ensureSvg(){
+  if(document.getElementById('cv')) return;
+  document.getElementById('canvasWrap').innerHTML=
+    '<svg id="cv" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg"><g id="scene"></g></svg>';
+  bindCanvas();
+}
+
+function drawAll(){
+  ensureSvg();
+  let s='';
+  // 격자
+  for(let i=0;i<=COLS;i++) s+='<line x1="'+gx(i)+'" y1="'+gy(0)+'" x2="'+gx(i)+'" y2="'+gy(ROWS)+'" stroke="var(--line)" stroke-width="0.5" opacity="0.55"/>';
+  for(let j=0;j<=ROWS;j++) s+='<line x1="'+gx(0)+'" y1="'+gy(j)+'" x2="'+gx(COLS)+'" y2="'+gy(j)+'" stroke="var(--line)" stroke-width="0.5" opacity="0.55"/>';
+
+  // 요소
+  elements.forEach(e=>{
+    const x1=gx(e.p1[0]), y1=gy(e.p1[1]), x2=gx(e.p2[0]), y2=gy(e.p2[1]);
+    const isSel=sel&&sel.kind==='el'&&sel.id===e.id;
+    const col=isSel?'var(--acc)':'var(--txt)';
+    if(e.type==='W'){
+      s+='<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+(isSel?'var(--acc)':'var(--wire)')+'" stroke-width="2.5"/>';
+    } else if(e.type==='R'){
+      s+='<path d="'+resistorPath(x1,y1,x2,y2)+'" fill="none" stroke="'+col+'" stroke-width="2"/>';
+      const mx=(x1+x2)/2, my=(y1+y2)/2;
+      const lbl=e.name+' '+fmtS(e.val)+'\u03A9';
+      const vert=Math.abs(x2-x1)<1;
+      const ox=vert?-8:0, oy=vert?-12:-9;
+      s+='<rect x="'+(mx+ox-lbl.length*3.2-3)+'" y="'+(my+oy-10)+'" width="'+(lbl.length*6.4+6)+'" height="14" fill="var(--bg)" opacity="0.9" rx="3"/>';
+      s+='<text x="'+(mx+ox)+'" y="'+(my+oy)+'" fill="'+col+'" font-size="10" text-anchor="middle">'+lbl+'</text>';
+    } else {
+      const mx=(x1+x2)/2, my=(y1+y2)/2;
+      const ux=(x2-x1)/Math.hypot(x2-x1,y2-y1), uy=(y2-y1)/Math.hypot(x2-x1,y2-y1);
+      s+='<line x1="'+x1+'" y1="'+y1+'" x2="'+(mx-ux*18)+'" y2="'+(my-uy*18)+'" stroke="var(--wire)" stroke-width="2"/>';
+      s+='<line x1="'+(mx+ux*18)+'" y1="'+(my+uy*18)+'" x2="'+x2+'" y2="'+y2+'" stroke="var(--wire)" stroke-width="2"/>';
+      s+='<circle cx="'+mx+'" cy="'+my+'" r="16" fill="var(--bg)" stroke="'+col+'" stroke-width="2"/>';
+      if(e.type==='V'){
+        s+='<line x1="'+(mx-5)+'" y1="'+my+'" x2="'+(mx+5)+'" y2="'+my+'" stroke="'+col+'" stroke-width="1.5"/>';
+        s+='<line x1="'+mx+'" y1="'+(my-5)+'" x2="'+mx+'" y2="'+(my+5)+'" stroke="'+col+'" stroke-width="1.5"/>';
+        s+='<text x="'+(x1+ux*22)+'" y="'+(y1+uy*22+4)+'" fill="var(--warn)" font-size="11" font-weight="700">+</text>';
+        s+='<text x="'+(x2-ux*22)+'" y="'+(y2-uy*22+4)+'" fill="var(--warn)" font-size="11" font-weight="700">\u2212</text>';
+      } else {
+        s+='<line x1="'+mx+'" y1="'+(my+8)+'" x2="'+mx+'" y2="'+(my-8)+'" stroke="'+col+'" stroke-width="1.5"/>';
+        s+='<path d="M '+(mx-4)+' '+(my-3)+' L '+mx+' '+(my-9)+' L '+(mx+4)+' '+(my-3)+' z" fill="'+col+'"/>';
+      }
+      const lbl=e.name+' '+fmtS(e.val)+(e.type==='V'?'V':'A');
+      s+='<text x="'+mx+'" y="'+(my+30)+'" fill="'+col+'" font-size="10" text-anchor="middle">'+lbl+'</text>';
+    }
+    // 히트 영역
+    s+='<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="transparent" stroke-width="16" data-el="'+e.id+'" style="cursor:pointer"/>';
+  });
+
+  // 점
+  const pts={};
+  elements.forEach(e=>{ pts[key(e.p1)]=e.p1; pts[key(e.p2)]=e.p2; });
+  Object.keys(pts).forEach(k=>{
+    const p=pts[k];
+    const isA=termA&&key(termA)===k, isB=termB&&key(termB)===k;
+    const isSel=sel&&sel.kind==='pt'&&key(sel.p)===k;
+    s+='<circle cx="'+gx(p[0])+'" cy="'+gy(p[1])+'" r="4" fill="'+(isSel?'var(--acc)':'var(--txt)')+'"/>';
+    if(isA||isB){
+      s+='<circle cx="'+gx(p[0])+'" cy="'+gy(p[1])+'" r="9" fill="none" stroke="var(--warn)" stroke-width="2.5"/>';
+      s+='<text x="'+(gx(p[0])+13)+'" y="'+(gy(p[1])-11)+'" fill="var(--warn)" font-size="12" font-weight="700">'+(isA?'A':'B')+'</text>';
+    }
+    s+='<circle cx="'+gx(p[0])+'" cy="'+gy(p[1])+'" r="14" fill="transparent" data-pt="'+k+'" style="cursor:crosshair"/>';
+  });
+
+  // 드래그 미리보기
+  if(dragFrom&&dragTo){
+    s+='<line x1="'+gx(dragFrom[0])+'" y1="'+gy(dragFrom[1])+'" x2="'+gx(dragTo[0])+'" y2="'+gy(dragTo[1])+
+       '" stroke="var(--acc)" stroke-width="2" stroke-dasharray="6 4" opacity="0.85"/>';
+  }
+  document.getElementById('scene').innerHTML=s;
+}
+
+/* ---------------- 입력 처리 ---------------- */
+function snap(evt,svg){
+  const r=svg.getBoundingClientRect();
+  const x=(evt.clientX-r.left)/r.width*W, y=(evt.clientY-r.top)/r.height*H;
+  const i=Math.round((x-MARGIN)/STEP), j=Math.round((y-MARGIN)/STEP);
+  if(i<0||j<0||i>COLS||j>ROWS) return null;
+  if(Math.hypot(x-gx(i),y-gy(j))>STEP*0.62) return null;
+  return [i,j];
+}
+
+function bindCanvas(){
+  const svg=document.getElementById('cv');
+  let dragging=false;
+  svg.addEventListener('pointerdown',e=>{
+    const t=e.target;
+    if(t.dataset.el){
+      sel={kind:'el', id:parseInt(t.dataset.el,10)}; renderSel(); drawAll(); return;
+    }
+    const p=snap(e,svg);
+    if(p){ dragging=true; dragFrom=p; dragTo=p; try{ svg.setPointerCapture(e.pointerId); }catch(err){} drawAll(); }
+  });
+  svg.addEventListener('pointermove',e=>{
+    if(!dragging) return;
+    const p=snap(e,svg);
+    if(p && (p[0]!==dragTo[0]||p[1]!==dragTo[1])){ dragTo=p; drawAll(); }
+  });
+  const onUp=e=>{
+    if(!dragging) return;
+    dragging=false;
+    const p=snap(e,svg);
+    const from=dragFrom; dragFrom=null; dragTo=null;
+    if(p){
+      const same=(p[0]===from[0]&&p[1]===from[1]);
+      if(same){
+        sel={kind:'pt', p:from}; renderSel(); drawAll(); return;
+      }
+      const horizontal=p[1]===from[1], vertical=p[0]===from[0];
+      if(!horizontal&&!vertical){ flash('가로나 세로로만 연결할 수 있습니다.'); drawAll(); return; }
+      addElement(tool, from, p);
+    }
+    drawAll();
+  };
+  svg.addEventListener('pointerup',onUp);
+  svg.addEventListener('pointercancel',onUp);
+  window.addEventListener('pointerup',e=>{ if(dragging) onUp(e); });
+}
+
+let flashMsg='';
+function flash(m){ flashMsg=m; document.getElementById('warnLine').textContent=m; setTimeout(()=>{ if(flashMsg===m){ flashMsg=''; document.getElementById('warnLine').textContent=''; } },4000); }
+
+function addElement(type,p1,p2){
+  const val=parseFloat(document.getElementById('valIn').value);
+  const name=(type==='R'?'R':type==='V'?'V':type==='I'?'I':'W')+(seq++);
+  elements.push({id:seq, type:type, p1:p1, p2:p2, val:(type==='W'?0:(isFinite(val)?val:10)), name:name});
+  sel={kind:'el', id:seq};
+  renderSel(); compute();
+}
+
+function renderSel(){
+  const si=document.getElementById('selInfo');
+  if(!sel){ si.innerHTML='선택 없음'; return; }
+  if(sel.kind==='pt'){
+    si.innerHTML='점 ('+sel.p[0]+', '+sel.p[1]+') 선택 — A/B 단자로 지정할 수 있습니다.';
+  } else {
+    const e=elements.find(x=>x.id===sel.id);
+    if(!e){ si.innerHTML='선택 없음'; return; }
+    si.innerHTML='<b>'+e.name+'</b> 선택 ('+e.type+') — 값을 바꾸면 즉시 다시 계산됩니다. '+
+      '<input id="selVal" type="number" step="any" value="'+e.val+'" style="width:90px;margin-left:6px">'+
+      (e.type==='W'?'':' <span style="color:var(--dim)">'+(e.type==='R'?'Ω':e.type==='V'?'V':'A')+'</span>');
+    const inp=document.getElementById('selVal');
+    if(inp) inp.addEventListener('input',()=>{
+      const v=parseFloat(inp.value);
+      if(isFinite(v)){ e.val=v; compute(); drawAll(); }
+    });
+  }
+}
+
+/* ---------------- 계산 ---------------- */
+function compute(){
+  const els=resolved(elements);
+  const warns=[];
+  const keyA=termA?key(termA):null, keyB=termB?key(termB):null;
+  const {map}=buildNodes(elements);
+  const nA=keyA?(map[keyA]||keyA):null, nB=keyB?(map[keyB]||keyB):null;
+
+  const res=document.getElementById('results');
+  const steps=document.getElementById('stepsPanel');
+  const chk=document.getElementById('checks');
+
+  if(!nA||!nB||nA===nB){
+    res.innerHTML='<div class="v"><div class="k">상태</div><div class="n">A·B 단자를 먼저 지정하세요</div>'+
+      '<div class="u">서로 다른 두 점을 A, B로 지정해야 계산됩니다</div></div>';
+    steps.innerHTML=''; chk.innerHTML=''; return;
+  }
+  if(!els.length){ res.innerHTML=''; return; }
+
+  // 노드 집합
+  const nodes={}; els.forEach(e=>{ nodes[e.a]=1; nodes[e.b]=1; });
+  nodes[nA]=1; nodes[nB]=1;
+
+  // 고립 점 검사
+  const deg={}; els.forEach(e=>{ deg[e.a]=(deg[e.a]||0)+1; deg[e.b]=(deg[e.b]||0)+1; });
+  Object.keys(deg).forEach(k=>{ if(deg[k]<2 && k!==nA && k!==nB) warns.push('연결이 하나뿐인 점이 있습니다 ('+k+')'); });
+
+  const full=els.map(e=>({t:e.t,a:e.a,b:e.b,val:e.val,id:e.id,name:e.name}));
+  const sol=solve(nodes,full,nB);
+  const Voc=(sol.v[nA]||0)-0;
+
+  const withShort=full.concat([{t:'V',a:nA,b:nB,val:0}]);
+  const sol2=solve(nodes,withShort,nB);
+  const Isc=sol2.xa[sol2.list.length+(withShort.filter(e=>e.t==='V').length-1)];
+
+  const d=deactivate(full);
+  const Rth=rthOf(d.net,d.find(nA),d.find(nB));
+
+  const red=reduce(d.net.map(e=>({t:'R',a:e.a,b:e.b,val:e.val,expr:e.name||'R'})),d.find(nA),d.find(nB));
+
+  res.innerHTML=[
+    ['테브난 전압 V_oc',fmt(Voc,4),'V',true],
+    ['테브난 저항 R_th',fmt(Rth,4),'Ω',true],
+    ['단락전류 I_sc',fmt(Isc,4),'A',false],
+    ['I_N',fmt(Voc/Rth,4),'A',false],
+    ['최대 전력 P_max',fmt(Voc*Voc/(4*Rth),4),'W',false]
+  ].map(x=>'<div class="v'+(x[3]?' hi':'')+'"><div class="k">'+x[0]+'</div><div class="n">'+x[1]+
+    '</div><div class="u">'+x[2]+'</div></div>').join('');
+
+  let sh='';
+  red.steps.forEach((st,i)=>{
+    sh+='<div class="step"><div class="fh">'+(i+1)+'. '+st.title+'</div>'+
+        '<div class="why">'+st.why+'</div></div>';
+  });
+  if(!red.steps.length) sh='<div class="why">이미 단순한 회로이거나, 직병렬로 줄일 수 없는 구조입니다.</div>';
+  else sh+='<div class="why">최종 R = '+fmt(red.net.length===1?red.net[0].val:NaN,4)+' Ω (R_th와 같아야 함)</div>';
+  steps.innerHTML=sh;
+
+  const same=(Math.abs(Rth)>1e-12)&&Math.abs(Isc)>1e-12&&Math.abs(Voc/Isc-Rth)<Math.max(1e-9,Math.abs(Rth)*1e-6);
+  chk.innerHTML=[
+    ['V_oc / I_sc = R_th', same, fmt(Math.abs(Isc)>1e-12?Voc/Isc:NaN,4)+' vs '+fmt(Rth,4)],
+    ['단계 축소가 R_th와 일치', red.net.length===1 && Math.abs(red.net[0].val-Rth)<Math.max(1e-9,Math.abs(Rth)*1e-6),
+      fmt(red.net.length===1?red.net[0].val:NaN,4)+' Ω'],
+    ['고립된 점 없음', warns.length===0, warns.length?warns[0]:'정상']
+  ].map(c=>'<div class="chk"><span>'+c[0]+'</span><b class="'+(c[1]?'ok':'bad')+'">'+
+    (c[1]?'✓ ':'! ')+c[2]+'</b></div>').join('');
+
+  document.getElementById('warnLine').textContent=warns.join(' · ');
+  try{ localStorage.setItem('ckt-v1',JSON.stringify({elements:elements,termA:termA,termB:termB,seq:seq})); }catch(err){}
+}
+
+/* ---------------- 도구 ---------------- */
+document.querySelectorAll('[data-tool]').forEach(b=>{
+  b.addEventListener('click',()=>{
+    tool=b.dataset.tool;
+    document.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('on',x===b));
+    document.getElementById('unitLbl').textContent=(tool==='R'?'Ω':tool==='V'?'V':tool==='I'?'A':'—');
+  });
+});
+document.getElementById('setA').addEventListener('click',()=>{
+  if(sel&&sel.kind==='pt'){ termA=sel.p; compute(); drawAll(); }
+  else flash('먼저 점을 선택하세요.');
+});
+document.getElementById('setB').addEventListener('click',()=>{
+  if(sel&&sel.kind==='pt'){ termB=sel.p; compute(); drawAll(); }
+  else flash('먼저 점을 선택하세요.');
+});
+document.getElementById('flip').addEventListener('click',()=>{
+  if(sel&&sel.kind==='el'){
+    const e=elements.find(x=>x.id===sel.id);
+    if(e){ const t=e.p1; e.p1=e.p2; e.p2=t; compute(); drawAll(); }
+  } else flash('소자를 먼저 선택하세요.');
+});
+document.getElementById('delSel').addEventListener('click',()=>{
+  if(sel&&sel.kind==='el'){ elements=elements.filter(x=>x.id!==sel.id); sel=null; renderSel(); compute(); drawAll(); }
+});
+document.getElementById('clearAll').addEventListener('click',()=>{
+  elements=[]; sel=null; termA=null; termB=null; seq=1; renderSel(); compute(); drawAll();
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Delete'&&sel&&sel.kind==='el'){
+    elements=elements.filter(x=>x.id!==sel.id); sel=null; renderSel(); compute(); drawAll();
+  }
+});
+
+function loadSample(n){
+  elements=[]; sel=null; seq=1;
+  const mk=(type,p1,p2,val,name)=>{ elements.push({id:seq++,type:type,p1:p1,p2:p2,val:val,name:name}); };
+  if(n===1){
+    mk('V',[0,0],[0,5],12,'V1');
+    mk('R',[0,0],[6,0],4,'R1');
+    mk('R',[6,0],[6,5],6,'R2');
+    mk('R',[6,0],[12,0],3,'R3');
+    mk('W',[0,5],[12,5],0,'W1');
+    termA=[12,0]; termB=[12,5];
+  } else {
+    mk('W',[0,6],[14,6],0,'W1');
+    mk('W',[1,2],[4,2],0,'W2');
+    mk('I',[1,6],[1,2],2,'I1');
+    mk('R',[4,2],[4,6],5,'R1');
+    mk('R',[4,2],[10,2],10,'R2');
+    mk('R',[10,2],[10,6],10,'R3');
+    mk('R',[10,2],[14,2],4,'R4');
+    termA=[14,2]; termB=[14,6];
+  }
+  compute(); drawAll(); renderSel();
+}
+document.getElementById('load1').addEventListener('click',()=>loadSample(1));
+document.getElementById('load2').addEventListener('click',()=>loadSample(2));
+
+/* ---------------- 시작 ---------------- */
+(function init(){
+  try{
+    const raw=localStorage.getItem('ckt-v1');
+    if(raw){ const o=JSON.parse(raw);
+      if(o&&o.elements&&o.elements.length){ elements=o.elements; termA=o.termA; termB=o.termB; seq=o.seq||1; } }
+  }catch(e){}
+  if(!elements.length) loadSample(1);
+  renderSel(); compute(); drawAll();
+})();
+</script>
+</body>
+</html>
