@@ -58,10 +58,16 @@
     <div class="d">검증된 회로 2개에서 값을 바꿔가며 단계 확인</div>
   </a>
 
-  <div class="note">
-    브라우저 주소가 <b>127.0.0.1</b>로 시작하면 이 PC에서만 열립니다 (iPad에서는 열리지 않습니다).<br>
-    서버를 끄려면 최소화된 <b>aside-local-server</b> 창을 닫으세요.
-  </div>
+  <div class="note" id="footerNote"></div>
+  <script>
+    (function(){
+      var h = location.hostname;
+      var local = (h === '127.0.0.1' || h === 'localhost' || h === '');
+      document.getElementById('footerNote').innerHTML = local
+        ? '로컬에서 실행 중입니다. 서버를 끄려면 최소화된 <b>aside-local-server</b> 창을 닫으세요.'
+        : 'iPad·휴대폰에서도 같은 주소로 열립니다. 각 도구는 파일 하나로 동작합니다.';
+    })();
+  </script>
 </div>
 </body>
 </html>
