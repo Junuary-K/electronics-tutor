@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>p채널 MOSFET · CMOS 인버터</title>
+<style>
+  :root{ --bg:#0f1216; --panel:#161b22; --line:#2a323d; --txt:#e6edf3; --dim:#9aa7b4;
+         --acc:#58a6ff; --warn:#f0883e; --ok:#3fb950; --red:#f85149; --pur:#bc8cff; --wire:#8b949e; --ec:#58a6ff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+       padding:16px 14px 40px;-webkit-text-size-adjust:100%}
+  h1{font-size:19px;margin:0 0 4px}
+  h2{font-size:14px;margin:0 0 8px;color:var(--acc)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .grid{display:grid;gap:9px}
+  .fld{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
+  .fld label{display:block;font-size:11px;color:var(--dim);margin-bottom:2px}
+  .fld input{width:100%;background:transparent;border:0;color:var(--txt);font:inherit;font-size:14px;outline:none;padding:0}
+  svg{width:100%;max-width:940px;height:auto;display:block;margin:0 auto;background:var(--bg);border-radius:8px}
+  .regime{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .pill{font-size:14px;font-weight:700;padding:5px 13px;border-radius:999px;border:1px solid}
+  .pill.cut{color:#8b949e;border-color:#8b949e}
+  .pill.tri{color:#58a6ff;border-color:#58a6ff}
+  .pill.sat{color:#f85149;border-color:#f85149}
+  .vals{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:9px}
+  .v{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+  .v .k{font-size:11px;color:var(--dim)} .v .n{font-size:16px;font-variant-numeric:tabular-nums}
+  .v .u{font-size:11px;color:var(--dim)}
+  .v.hi{border-color:var(--acc)}
+  .chk{font-size:12.5px;display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .chk:last-child{border-bottom:0}
+  .ok{color:var(--ok)} .bad{color:var(--warn)}
+  .note{font-size:12.5px;color:var(--dim);margin-top:8px}
+  .note b{color:var(--txt)}
+</style>
+</head>
+<body>
+
+<h1>p채널 MOSFET · CMOS 인버터</h1>
+<div class="sub">부호 규약(V_SG, V_SD) · 포화/선형 판정 · 인버터 전압 전달 특성(VTC)과 스위칭 문턱</div>
+
+<div class="card">
+  <h2>p채널 MOSFET</h2>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(118px,1fr))">
+    <div class="fld"><label>V_SG (V)</label><input id="vsg" type="number" step="0.01" value="1.5"></div>
+    <div class="fld"><label>V_SD (V)</label><input id="vsd" type="number" step="0.01" value="1.5"></div>
+    <div class="fld"><label>V_TP (V, 음수)</label><input id="vtp" type="number" step="0.01" value="-0.70"></div>
+    <div class="fld"><label>k_p′ (µA/V²)</label><input id="kp" type="number" step="1" value="60"></div>
+    <div class="fld"><label>W/L</label><input id="wlp" type="number" step="0.1" value="10"></div>
+    <div class="fld"><label>λ (1/V)</label><input id="lam" type="number" step="0.001" value="0.020"></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="regime">
+    <span id="pill" class="pill cut">—</span>
+    <span class="note" id="why" style="margin:0"></span>
+  </div>
+  <div class="vals" id="pvals"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">p-MOS 출력 특성 |I_SD| – V_SD</div>
+  <div id="pout"></div>
+  <div class="note">전류는 <b>source → drain</b> 방향(구멍)입니다. 축은 크기로 표시했습니다.
+    빨간 점선이 포화 경계 V_SD = V_ov.</div>
+</div>
+
+<div class="card">
+  <h2>CMOS 인버터</h2>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(118px,1fr))">
+    <div class="fld"><label>V_DD (V)</label><input id="vdd" type="number" step="0.1" value="3.3"></div>
+    <div class="fld"><label>V_in (V)</label><input id="vin" type="number" step="0.01" value="1.4884"></div>
+    <div class="fld"><label>V_TN (V)</label><input id="vtn" type="number" step="0.01" value="0.70"></div>
+    <div class="fld"><label>V_TP (V, 음수)</label><input id="vtp2" type="number" step="0.01" value="-0.70"></div>
+    <div class="fld"><label>k_n (µA/V²)</label><input id="kn" type="number" step="1" value="120"></div>
+    <div class="fld"><label>k_p (µA/V²)</label><input id="kp2" type="number" step="1" value="60"></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="vals" id="cvals"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">전압 전달 특성 (VTC)</div>
+  <div id="vtc"></div>
+  <div class="note" id="vtcNote"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">검산</div>
+  <div id="checks"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const fmt=(v,d)=>{ d=(d===undefined)?3:d;
+  return v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); };
+const eng=v=>{ const a=Math.abs(v); if(a===0) return '0';
+  const SUP={'-':'\u207B','0':'\u2070','1':'\u00B9','2':'\u00B2','3':'\u00B3','4':'\u2074','5':'\u2075','6':'\u2076','7':'\u2077','8':'\u2078','9':'\u2079'};
+  if(a>=1e4||a<1e-2){ const e=Math.floor(Math.log10(a));
+    return (v/Math.pow(10,e)).toFixed(3)+'\u00D710'+String(e).split('').map(c=>SUP[c]||c).join(''); }
+  return String(+v.toPrecision(4)); };
+
+/* ---------- pM: 크기 기준 ---------- */
+function pRegion(vsg,vsd,vtp){ const vov=vsg-Math.abs(vtp);
+  if(vov<=0) return 'cut'; return vsd<vov?'tri':'sat'; }
+function pId(vsg,vsd,vtp,kp,lam){
+  const vov=vsg-Math.abs(vtp); if(vov<=0) return 0;
+  if(vsd<vov) return kp*(vov*vsd-0.5*vsd*vsd)*(1+lam*vsd);
+  return 0.5*kp*vov*vov*(1+lam*vsd);
+}
+/* ---------- nMOS ---------- */
+function nRegion(vgs,vds,vtn){ const vov=vgs-vtn;
+  if(vov<=0) return 'cut'; return vds<vov?'tri':'sat'; }
+function nId(vgs,vds,vtn,kn,lam){
+  const vov=vgs-vtn; if(vov<=0) return 0;
+  if(vds<vov) return kn*(vov*vds-0.5*vds*vds)*(1+lam*vds);
+  return 0.5*kn*vov*vov*(1+lam*vds);
+}
+
+function P(){
+  return {
+    vsg:+$('vsg').value, vsd:+$('vsd').value, vtp:+$('vtp').value,
+    kp:(+$('kp').value)*1e-6*(+$('wlp').value), lam:+$('lam').value,
+    vdd:+$('vdd').value, vin:+$('vin').value, vtn:+$('vtn').value, vtp2:+$('vtp2').value,
+    kn:(+$('kn').value)*1e-6, kp2:(+$('kp2').value)*1e-6
+  };
+}
+
+function drawPOut(p,r){
+  const W=940,H=380,padL=80,padR=26,padT=26,padB=54;
+  const pw=W-padL-padR, ph=H-padT-padB;
+  const vsdMax=Math.max(1.2, p.vsd*1.6, (Math.abs(p.vtp)+1.2)*1.6);
+  const gsList=[];
+  for(let k=1;k<=4;k++) gsList.push(Math.abs(p.vtp)+0.3*k);
+  if(!gsList.some(g=>Math.abs(g-p.vsg)<1e-9)) gsList.push(p.vsg);
+  gsList.sort((a,b)=>a-b);
+  let imax=1e-12;
+  gsList.forEach(g=>{ for(let i=0;i<=100;i++){ const v=vsdMax*i/100;
+    const c=pId(g,v,p.vtp,p.kp,p.lam); if(c>imax) imax=c; } });
+  imax*=1.12;
+  const X=v=>padL+v/vsdMax*pw, Y=i=>padT+ph-i/imax*ph;
+  const T=(x,y,t,c,s,a,w)=>'<text x="'+x+'" y="'+y+'" fill="'+(c||'var(--dim')+')" font-size="'+(s||11)+
+    '" font-weight="'+(w||400)+'" text-anchor="'+(a||'start')+'">'+t+'</text>';
+
+  let s='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="pMOS 출력 특성">';
+  s+='<rect x="'+padL+'" y="'+padT+'" width="'+pw+'" height="'+ph+'" fill="none" stroke="var(--line)"/>';
+  // 포화 경계
+  let bnd=[];
+  const gMax=gsList[gsList.length-1];
+  for(let i=1;i<=80;i++){
+    const g=Math.abs(p.vtp)+(gMax-Math.abs(p.vtp))*i/80;
+    const vov=g-Math.abs(p.vtp); if(vov<=0||vov>vsdMax) continue;
+    bnd.push(X(vov)+','+Y(pId(g,vov,p.vtp,p.kp,p.lam)));
+  }
+  if(bnd.length){
+    s+='<polyline points="'+bnd.join(' ')+'" fill="none" stroke="var(--red)" stroke-width="1.4" stroke-dasharray="6 5" opacity="0.85"/>';
+    s+=T(X(bnd[0].split(',')[0])+6,padT+18,'포화 경계 V_SD = V_ov','var(--red)',10.5,'start',600);
+  }
+  gsList.forEach(g=>{
+    const cur=Math.abs(g-p.vsg)<1e-9;
+    let pts=[]; for(let i=0;i<=140;i++){ const v=vsdMax*i/140; pts.push(X(v)+','+Y(pId(g,v,p.vtp,p.kp,p.lam))); }
+    s+='<polyline points="'+pts.join(' ')+'" fill="none" stroke="'+(cur?'var(--pur)':'var(--wire)')+
+       '" stroke-width="'+(cur?2.6:1.4)+'" opacity="'+(cur?1:0.75)+'"/>';
+    s+=T(padL+pw-6,Y(pId(g,vsdMax,p.vtp,p.kp,p.lam))-6,'V_SG='+fmt(g,2),cur?'var(--pur)':'var(--dim)',10,'end');
+  });
+  const dx=X(p.vsd), dy=Y(r.i);
+  s+='<circle cx="'+dx+'" cy="'+dy+'" r="5.5" fill="var(--warn)" stroke="var(--bg)" stroke-width="2"/>';
+  [0,0.25,0.5,0.75,1].forEach(f=>{ s+=T(padL+f*pw,padT+ph+18,fmt(vsdMax*f,2),'var(--dim)',10,'middle'); });
+  s+=T(padL+pw/2,padT+ph+38,'V_SD (V)','var(--dim)',11,'middle');
+  [0,0.25,0.5,0.75,1].forEach(f=>{
+    s+=T(padL-8,Y(imax*f)+4,eng(imax*f),'var(--dim)',10,'end');
+    s+='<line x1="'+padL+'" y1="'+Y(imax*f)+'" x2="'+(padL-5)+'" y2="'+Y(imax*f)+'" stroke="var(--line)"/>'; });
+  s+=T(padL-8,padT-8,'|I_SD| (A)','var(--dim)',10,'end');
+  s+='</svg>';
+  return s;
+}
+
+/* ---------- CMOS ---------- */
+function voutOf(p,vin){
+  const vdd=p.vdd, vtn=p.vtn, vtp=p.vtp2;
+  if(vin<=vtn) return vdd;
+  if((vdd-vin)<=Math.abs(vtp)) return 0;
+  const g=v=>nId(vin,v,vtn,p.kn,p.lam)-pId(vdd-vin,vdd-v,vtp,p.kp2,p.lam);
+  let lo=0, hi=vdd;
+  for(let i=0;i<80;i++){ const m=(lo+hi)/2; if(g(m)<0) lo=m; else hi=m; }
+  return (lo+hi)/2;
+}
+function vM(p){
+  let lo=0, hi=p.vdd;
+  for(let i=0;i<80;i++){ const m=(lo+hi)/2;
+    if(voutOf(p,m)-m>0) lo=m; else hi=m; }
+  return (lo+hi)/2;
+}
+
+function drawVTC(p,vin,vout){
+  const W=940,H=420,padL=74,H0=H,padR=26,padT=26,padB=58;
+  const pw=W-padL-padR, ph=H-padT-padB;
+  const vdd=p.vdd;
+  const X=v=>padL+v/vdd*pw, Y=v=>padT+ph-v/vdd*ph;
+  const T=(x,y,t,c,s,a,w)=>'<text x="'+x+'" y="'+y+'" fill="'+(c||'var(--dim)')+'" font-size="'+(s||11)+
+    '" font-weight="'+(w||400)+'" text-anchor="'+(a||'start')+'">'+t+'</text>';
+  let s='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="VTC">';
+  s+='<rect x="'+padL+'" y="'+padT+'" width="'+pw+'" height="'+ph+'" fill="none" stroke="var(--line)"/>';
+  // 영역 음영
+  s+='<rect x="'+X(0)+'" y="'+padT+'" width="'+(X(p.vtn)-X(0))+'" height="'+ph+'" fill="var(--acc)" opacity="0.06"/>';
+  s+='<rect x="'+X(vdd-Math.abs(p.vtp2))+'" y="'+padT+'" width="'+(X(vdd)-X(vdd-Math.abs(p.vtp2)))+'" height="'+ph+'" fill="var(--red)" opacity="0.06"/>';
+  // 대각선
+  s+='<line x1="'+X(0)+'" y1="'+Y(0)+'" x2="'+X(vdd)+'" y2="'+Y(vdd)+'" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4"/>';
+  // VTC
+  let pts=[];
+  for(let i=0;i<=240;i++){ const v=vdd*i/240; pts.push(X(v)+','+Y(voutOf(p,v))); }
+  s+='<polyline points="'+pts.join(' ')+'" fill="none" stroke="var(--acc)" stroke-width="2.6"/>';
+  // V_M
+  const vm=vM(p);
+  s+='<line x1="'+X(vm)+'" y1="'+padT+'" x2="'+X(vm)+'" y2="'+(padT+ph)+'" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4 4"/>';
+  s+='<circle cx="'+X(vm)+'" cy="'+Y(vm)+'" r="4" fill="var(--warn)"/>';
+  s+=T(X(vm)+6,Y(vm)-8,'V_M = '+fmt(vm,3)+' V','var(--warn)',10.5,'start',600);
+  // 동작점
+  s+='<circle cx="'+X(vin)+'" cy="'+Y(vout)+'" r="6" fill="var(--pur)" stroke="var(--bg)" stroke-width="2"/>';
+  s+=T(X(vin)+9,Y(vout)+4,'('+fmt(vin,2)+', '+fmt(vout,2)+')','var(--pur)',10.5,'start',600);
+  // 축
+  [0,0.25,0.5,0.75,1].forEach(f=>{
+    s+=T(padL+f*pw,padT+ph+18,fmt(vdd*f,2),'var(--dim)',10,'middle');
+    s+=T(padL-8,Y(vdd*f)+4,fmt(vdd*f,2),'var(--dim)',10,'end');
+  });
+  s+=T(padL+pw/2,padT+ph+40,'V_in (V)','var(--dim)',11,'middle');
+  s+=T(padL-8,padT-8,'V_out (V)','var(--dim)',10,'end');
+  s+='</svg>';
+  return s;
+}
+
+function render(){
+  const p=P();
+  // pMOS
+  const pr=pRegion(p.vsg,p.vsd,p.vtp);
+  const pi=pId(p.vsg,p.vsd,p.vtp,p.kp,p.lam);
+  const vovp=p.vsg-Math.abs(p.vtp);
+  const pill=$('pill');
+  pill.className='pill '+(pr==='cut'?'cut':pr==='tri'?'tri':'sat');
+  pill.textContent={cut:'컷오프',tri:'선형 (triode)',sat:'포화'}[pr];
+  $('why').textContent = pr==='cut'
+    ? 'V_SG('+fmt(p.vsg,2)+') < |V_TP|('+fmt(Math.abs(p.vtp),2)+') → 채널 없음'
+    : 'V_ov = V_SG − |V_TP| = '+fmt(vovp,3)+' V  vs  V_SD = '+fmt(p.vsd,3)+' V → '+
+      (p.vsd<vovp?'V_SD < V_ov 이므로 선형':'V_SD ≥ V_ov 이므로 포화');
+  $('pvals').innerHTML=[
+    ['V_ov',fmt(vovp,4),'V',false],
+    ['|I_SD|',eng(pi),'A',true],
+    ['방향','S → D','구멍',false],
+    ['|V_TP|',fmt(Math.abs(p.vtp),3),'V',false]
+  ].map(x=>'<div class="v'+(x[3]?' hi':'')+'"><div class="k">'+x[0]+'</div><div class="n">'+x[1]+
+    '</div><div class="u">'+x[2]+'</div></div>').join('');
+  $('pout').innerHTML=drawPOut(p,{i:pi});
+
+  // CMOS
+  const vout=voutOf(p,p.vin);
+  const vm=vM(p);
+  const iN=nId(p.vin,vout,p.vtn,p.kn,p.lam);
+  const iP=pId(p.vdd-p.vin,p.vdd-vout,p.vtp2,p.kp2,p.lam);
+  const rN=nRegion(p.vin,vout,p.vtn);
+  const rP=pRegion(p.vdd-p.vin,p.vdd-vout,p.vtp2);
+  const regName={cut:'컷오프',tri:'선형',sat:'포화'};
+  const idd=Math.max(iN,iP);
+  $('cvals').innerHTML=[
+    ['V_in',fmt(p.vin,3),'V',false],
+    ['V_out',fmt(vout,3),'V',true],
+    ['V_M',fmt(vm,3),'V',false],
+    ['I_DD',eng(idd),'A',false],
+    ['P_static = V_DD·I_DD',eng(p.vdd*idd),'W',false],
+    ['nMOS',regName[rN],'',false],
+    ['pMOS',regName[rP],'',false]
+  ].map(x=>'<div class="v'+(x[3]?' hi':'')+'"><div class="k">'+x[0]+'</div><div class="n">'+x[1]+
+    '</div><div class="u">'+x[2]+'</div></div>').join('');
+  $('vtc').innerHTML=drawVTC(p,p.vin,vout);
+  $('vtcNote').innerHTML='<b>V_M = '+fmt(vm,3)+' V</b> 는 V_in = V_out 이 되는 점(스위칭 문턱)입니다. '+
+    '파란 영역(V_in < V_TN)에서는 nMOS가 꺼져 V_out = V_DD, 빨간 영역에서는 pMOS가 꺼져 V_out = 0. '+
+    '두 소자가 동시에 켜지는 가운데 구간에서만 전류가 흐르고 전력이 소모됩니다.';
+
+  // 검산
+  const chk=[
+    ['V_out = V_DD at V_in = 0', Math.abs(voutOf(p,0)-p.vdd)<1e-9, fmt(voutOf(p,0),4)+' V'],
+    ['V_out = 0 at V_in = V_DD', Math.abs(voutOf(p,p.vdd))<1e-9, fmt(voutOf(p,p.vdd),4)+' V'],
+    ['V_out(V_M) = V_M', Math.abs(voutOf(p,vm)-vm)<1e-6, fmt(voutOf(p,vm),4)+' vs '+fmt(vm,4)],
+    ['전류 평형 I_n = I_p', Math.abs(iN-iP)<1e-9*Math.max(1,iN), eng(iN)+' vs '+eng(iP)]
+  ];
+  $('checks').innerHTML=chk.map(c=>'<div class="chk"><span>'+c[0]+'</span><b class="'+(c[1]?'ok':'bad')+'">'+
+    (c[1]?'✓ ':'! ')+c[2]+'</b></div>').join('');
+}
+
+['vsg','vsd','vtp','kp','wlp','lam','vdd','vin','vtn','vtp2','kn','kp2'].forEach(id=>$(id).addEventListener('input',render));
+render();
+</script>
+</body>
+</html>
