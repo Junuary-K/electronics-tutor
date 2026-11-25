@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5단 파이프라인 — RAW 해저드 · 스톨 · 포워딩</title>
+<style>
+  :root{ --bg:#0f1216; --panel:#161b22; --line:#2a323d; --txt:#e6edf3; --dim:#9aa7b4;
+         --acc:#58a6ff; --warn:#f0883e; --ok:#3fb950; --red:#f85149; --pur:#bc8cff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+       padding:16px 14px 40px;-webkit-text-size-adjust:100%}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .grid{display:grid;gap:9px}
+  .fld{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
+  .fld label{display:block;font-size:11px;color:var(--dim);margin-bottom:2px}
+  .fld textarea{width:100%;background:transparent;border:0;color:var(--txt);font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;outline:none;padding:0;resize:vertical}
+  .fld select{width:100%;background:transparent;border:0;color:var(--txt);font:inherit;font-size:14px;outline:none;padding:0}
+  .tog{display:inline-flex;gap:0;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+  .tog button{background:transparent;color:var(--dim);border:0;font:inherit;font-size:13px;padding:6px 14px;cursor:pointer}
+  .tog button.on{background:var(--acc);color:#0f1216;font-weight:700}
+  .vals{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:9px}
+  .v{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+  .v .k{font-size:11px;color:var(--dim)} .v .n{font-size:16px;font-variant-numeric:tabular-nums}
+  .v .u{font-size:11px;color:var(--dim)}
+  .v.hi{border-color:var(--acc)}
+  .chk{font-size:12.5px;display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .chk:last-child{border-bottom:0}
+  .ok{color:var(--ok)} .bad{color:var(--warn)}
+  .note{font-size:12.5px;color:var(--dim);margin-top:8px}
+  .note b{color:var(--txt)}
+  svg{width:100%;height:auto;display:block;background:var(--bg);border-radius:8px}
+</style>
+</head>
+<body>
+
+<h1>5단 파이프라인 — RAW 해저드 · 스톨 · 포워딩</h1>
+<div class="sub">컴퓨터구조 · IF-ID-EX-MEM-WB · 의존 명령어가 왜 파이프를 멈추게 하는지 직접 보기</div>
+
+<div class="card">
+  <div class="grid" style="grid-template-columns:1fr 150px">
+    <div class="fld"><label>명령어 시퀀스 (한 줄에 한 명령)</label>
+      <textarea id="code" rows="8" spellcheck="false">lw   $1, 0($2)
+add  $3, $1, $4
+sub  $5, $3, $6
+or   $7, $8, $9</textarea></div>
+    <div class="fld"><label>예제</label>
+      <select id="pre">
+        <option value="loaduse">load-use (포워딩돼도 1스톨)</option>
+        <option value="alu">ALU 연쇄 RAW</option>
+        <option value="clean">해저드 없음</option>
+        <option value="far">먼 의존 (2칸 떨어짐)</option>
+      </select>
+      <div style="margin-top:10px"><label style="display:block;font-size:11px;color:var(--dim);margin-bottom:4px">포워딩</label>
+      <div class="tog"><button id="fwOn">ON</button><button id="fwOff">OFF</button></div></div>
+    </div>
+  </div>
+  <div class="note">문법: <b>lw $d, off($s)</b> · <b>sw $s, off($d)</b> · <b>add/sub/or/and $d, $s, $t</b> · <b>nop</b> · $0은 항상 0 (쓰기 무시)</div>
+</div>
+
+<div class="card"><div class="vals" id="vals"></div><div class="note" id="narr"></div></div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">파이프라인 다이어그램 (칸 = 클럭, 색 = 단계, 굵은 화살표 = 포워딩)</div>
+  <svg id="dia"></svg>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">검산</div>
+  <div id="checks"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const fmt=(v,d)=>{d=(d===undefined)?0:d;
+  return v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});};
+
+const PRESET={
+  loaduse:'lw   $1, 0($2)\nadd  $3, $1, $4\nsub  $5, $3, $6\nor   $7, $8, $9',
+  alu:'add  $1, $2, $3\nsub  $4, $1, $5\nor   $6, $7, $1\nand  $8, $1, $9',
+  clean:'add  $1, $2, $3\nsub  $4, $5, $6\nor   $7, $8, $9\nand  $10, $11, $12',
+  far:'add  $1, $2, $3\nor   $6, $7, $8\nsub  $4, $1, $5'
+};
+
+/* ---------- 파서 ---------- */
+function parse(line,i){
+  const t=line.trim().replace(/,/g,' ').split(/\s+/);
+  const op=t[0].toLowerCase();
+  const R=s=>{const m=s.match(/\$(\d+)/);return m?'$'+m[1]:null;};
+  if(op==='nop') return {op,dest:null,srcs:[],raw:line};
+  if(op==='lw'){ const m=t[2]&&t[2].match(/-?\d+\((\$\d+)\)/);
+    return {op,dest:R(t[1]),srcs:[m?m[1]:null],raw:line}; }
+  if(op==='sw'){ const m=t[2]&&t[2].match(/-?\d+\((\$\d+)\)/);
+    return {op,dest:null,srcs:[R(t[1]),m?m[1]:null],raw:line}; }
+  return {op,dest:R(t[1]),srcs:[R(t[2]),R(t[3])],raw:line};
+}
+
+/* ---------- 스케줄러 — verify_pipeline.py와 같은 규칙 ----------
+   포워딩 ON : ALU 생산자 EX_j+1 이후 EX 가능, lw 생산자 MEM_j+1 이후 EX 가능
+   포워딩 OFF: 생산자 WB_j+1 이후 ID 가능 (레지스터 쓰기 다음 사이클에 읽음)
+   스톨 중 IF 동결: 다음 IF_i+1 = IF_i + 1 + stalls_i                       */
+function schedule(instrs,fwd){
+  let cur=1, stallsTotal=0, fwdEvents=[], rows=[];
+  instrs.forEach((ins,i)=>{
+    const IF=cur, IDnat=IF+1;
+    let reqEx=IDnat+1, reqId=IDnat;
+    for(const r of ins.srcs){
+      if(!r||r==='$0') continue;
+      for(let j=i-1;j>=0;j--){
+        if(instrs[j].dest===r&&instrs[j].dest!=='$0'){
+          const p=rows[j];
+          if(fwd){
+            const need=(instrs[j].op==='lw')?p.MEM+1:p.EX+1;
+            if(need>reqEx) reqEx=need;
+            /* 화살표: 시간상 맞거나(need≥자연EX) 레지스터가 아직 비어있으면(ID≤WB) */
+            if(need>=IDnat+1||IDnat<=p.WB){
+              fwdEvents.push({from:{i:j,cyc:(instrs[j].op==='lw')?p.MEM:p.EX,
+                                      st:(instrs[j].op==='lw')?'MEM':'EX'},to:{i,cyc:0},reg:r});
+            }
+          }else{
+            const need=p.WB+1;
+            if(need>reqId) reqId=need;
+          }
+          break;   /* 가장 가까운 생산자만 */
+        }
+      }
+    }
+    const ID=Math.max(IDnat,reqId);
+    const stalls=(ID-IDnat)+(reqEx>Math.max(IDnat,ID)+0?Math.max(0,reqEx-(ID+1)):0);
+    /* 간단화: EX = max(ID+1, reqEx, EX자연) */
+    const EX=Math.max(ID+1,reqEx);
+    const st=EX-(IDnat+1);
+    stallsTotal+=st;
+    const MEM=EX+1, WB=MEM+1;
+    rows.push({ins,i,IF,ID,IDnat,EX,MEM,WB,stalls:st});
+    cur=IF+1+st;   /* 스톨만큼 뒤의 IF 동결 */
+  });
+  /* 포워딩 이벤트의 도착 EX 갱신 */
+  for(const e of fwdEvents) e.to.cyc=rows[e.to.i].EX;
+  return {rows,stallsTotal,fwdEvents,total:rows.length?rows[rows.length-1].WB:0};
+}
+
+/* ---------- 다이어그램 ---------- */
+function mk(tag,attrs){const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+const STG={IF:'#8b949e',ID:'#58a6ff',EX:'#f0883e',MEM:'#bc8cff',WB:'#3fb950'};
+const W=52, RH=34, PADL=178, PADT=30;
+
+function draw(res,fwd){
+  const s=$('dia'); s.innerHTML='';
+  const n=res.rows.length, total=res.total;
+  const wid=PADL+total*W+30, hei=PADT+n*RH+40;
+  s.setAttribute('viewBox','0 0 '+wid+' '+hei);
+  /* 클럭 축 */
+  for(let c=1;c<=total;c++){
+    s.appendChild(mk('text',{x:PADL+(c-1)*W+W/2,y:PADT-10,fill:'#9aa7b4','font-size':11,'text-anchor':'middle'})).textContent=c;
+  }
+  /* 스톨 열 음영 */
+  for(const r of res.rows){
+    for(let c=1;c<=total;c++){}
+  }
+  res.rows.forEach((row,i)=>{
+    const y=PADT+i*RH;
+    /* 명령 라벨 */
+    const lb=mk('text',{x:PADL-10,y:y+RH/2+4,fill:'#e6edf3','font-size':12,'text-anchor':'end',
+      'font-family':'ui-monospace,Menlo,monospace'});
+    lb.textContent=row.ins.raw.trim().slice(0,24);
+    if(row.stalls>0) lb.setAttribute('fill','#f0883e');
+    s.appendChild(lb);
+    /* 단계 셀 */
+    const cells=[['IF',row.IF],['ID',row.ID],['EX',row.EX],['MEM',row.MEM],['WB',row.WB]];
+    cells.forEach(([st,c])=>{
+      const x=PADL+(c-1)*W, y2=y+3, h=RH-7;
+      s.appendChild(mk('rect',{x:x+2,y:y2,width:W-4,height:h,rx:6,fill:STG[st],opacity:0.18}));
+      s.appendChild(mk('rect',{x:x+2,y:y2,width:W-4,height:h,rx:6,fill:'none',stroke:STG[st],'stroke-width':1.3}));
+      const t=mk('text',{x:x+W/2,y:y2+h/2+4,fill:STG[st],'font-size':11,'text-anchor':'middle','font-weight':700});
+      t.textContent=st; s.appendChild(t);
+    });
+    /* 스톨 버블: IDnat..ID-1 구간과 EX 자연위치 */
+    for(let c=row.IDnat;c<row.EX;c++){
+      if(cells.some(([st,cc])=>cc===c)) continue;
+      const x=PADL+(c-1)*W;
+      s.appendChild(mk('text',{x:x+W/2,y:y+RH/2+4,fill:'#f85149','font-size':13,'text-anchor':'middle'})).textContent='•';
+    }
+    if(row.stalls>0){
+      const x=PADL+(row.EX-1)*W;
+      const t=mk('text',{x:x+W/2,y:y-2,fill:'#f85149','font-size':10,'text-anchor':'middle'});
+      t.textContent='stall×'+row.stalls; s.appendChild(t);
+    }
+  });
+  /* 포워딩 화살표 */
+  if(fwd){
+    res.fwdEvents.forEach(e=>{
+      const y1=PADT+e.from.i*RH+RH/2, y2=PADT+e.to.i*RH+RH/2;
+      const x1=PADL+(e.from.cyc-1)*W+W-2, x2=PADL+(e.to.cyc-1)*W+4;
+      const col=e.from.st==='MEM'?'#3fb950':'#f0883e';
+      const p='M'+x1+' '+y1+' C '+(x1+34)+' '+(y1+2)+', '+(x2-34)+' '+(y2-6)+', '+x2+' '+(y2+6);
+      s.appendChild(mk('path',{d:p,fill:'none',stroke:col,'stroke-width':2.4}));
+      s.appendChild(mk('polygon',{points:x2+','+(y2+6)+' '+(x2-8)+' '+(y2-2)+' '+(x2-2)+' '+(y2+12),fill:col}));
+      const t=mk('text',{x:(x1+x2)/2,y:(y1+y2)/2+12,fill:col,'font-size':10,'text-anchor':'middle'});
+      t.textContent=e.reg+' '+e.from.st+'→EX'; s.appendChild(t);
+    });
+  }
+  /* 범례 */
+  let lx=PADL;
+  for(const [st,c] of Object.entries(STG)){
+    s.appendChild(mk('rect',{x:lx,y:hei-22,width:12,height:12,rx:3,fill:c,opacity:0.5}));
+    s.appendChild(mk('text',{x:lx+16,y:hei-12,fill:'#9aa7b4','font-size':11})).textContent=st;
+    lx+=64;
+  }
+  s.appendChild(mk('text',{x:lx,y:hei-12,fill:'#f85149','font-size':11})).textContent='• stall(버블)';
+}
+
+function render(){
+  const fwd=STATE.fwd;
+  const lines=$('code').value.split('\n').filter(l=>l.trim()&&!l.trim().startsWith('#'));
+  const instrs=lines.map(parse);
+  if(!instrs.length){$('vals').innerHTML='';return;}
+  const res=schedule(instrs,fwd);
+  draw(res,fwd);
+
+  const N=instrs.length, cycles=res.total, cpi=cycles/N;
+  const lu=res.fwdEvents.filter(e=>e.from.st==='MEM').length;
+  $('vals').innerHTML=
+    '<div class="v hi"><div class="k">총 사이클</div><div class="n">'+cycles+'</div><div class="u">클럭</div></div>'+
+    '<div class="v"><div class="k">CPI</div><div class="n">'+fmt(cpi,2)+'</div><div class="u">사이클/명령</div></div>'+
+    '<div class="v"><div class="k">스톨 합계</div><div class="n">'+res.stallsTotal+'</div><div class="u">버블</div></div>'+
+    '<div class="v"><div class="k">포워딩 경로</div><div class="n">'+res.fwdEvents.length+'</div><div class="u">'+lu+'개 MEM→EX</div></div>';
+  const why=fwd?
+    '포워딩 ON'+': ALU 결과는 <b>EX 끝에서 바로 다음 EX로</b>, lw 결과는 <b>MEM 끝에서 다음 EX로</b> 돌려준다. 그래도 load-use는 lw의 MEM이 끝나야 값이 있어 <b>1스톨</b>이 남는다.'
+   :'포워딩 OFF'+': 값을 <b>레지스터에 쓰고(WB) 다음 사이큥</b>에야 ID에서 읽을 수 있다. RAW가 하나라도 붙으면 두세 칸씩 밀린다. 포워딩 ON과 비교해보라.';
+  $('narr').innerHTML=why+' 다이어그램에서 <b>• 버블이 낀 만큼 전체가 뒤로 밀리는</b> 게 CPI 상승의 원인이다.';
+
+  buildChecks(res,instrs,fwd);
+}
+
+/* 검산 */
+const STATE={fwd:true};
+function buildChecks(res,instrs,fwd){
+  const rows=[]; let all=true;
+  const N=instrs.length;
+  /* 1. 총 사이클 = N + 4 + 스톨 (초기 4사이클 채우기 + 스톨만큼 지연) */
+  const want=N+4+res.stallsTotal;
+  const ok1=res.total===want;
+  rows.push(['총 사이클 = N + 4 + Σ스톨',res.total+' = '+N+'+4+'+res.stallsTotal,ok1]); all&=ok1;
+
+  /* 2. 마지막 명령 WB == total */
+  const ok2=res.rows[N-1].WB===res.total;
+  rows.push(['마지막 WB가 전체 길이',res.rows[N-1].WB+' = '+res.total,ok2]); all&=ok2;
+
+  /* 3. 포워딩 ON에서 스톨은 load-use만 (lw 직후 사용) */
+  if(fwd){
+    let lu=0;
+    res.rows.forEach((r,i)=>{
+      if(i>0&&instrs[i-1].op==='lw'&&instrs[i].srcs.some(x=>x===instrs[i-1].dest&&x!=='$0')) lu++;
+    });
+    const ok3=lu===res.stallsTotal;
+    rows.push(['포워딩 ON: 스톨 전부 load-use',lu+'개 = '+res.stallsTotal,ok3]); all&=ok3;
+  }else{
+    /* 4. 포워딩 OFF: 스톨이 ON보다 작지 않음 */
+    const res2=schedule(instrs,true);
+    const ok4=res.stallsTotal>=res2.stallsTotal;
+    rows.push(['무포워딩 스톨 ≥ 포워딩 스톨',res.stallsTotal+' ≥ '+res2.stallsTotal,ok4]); all&=ok4;
+  }
+
+  /* 5. 예제 기대값 (손계산: 규칙 = 포워딩 ON은 lw MEM+1/ALU EX+1 이후 EX, OFF는 WB+1 이후 ID) */
+  const exp={'loaduse':fwd?[9,1]:[14,6],'alu':fwd?[8,0]:[11,3],
+             'clean':fwd?[8,0]:[8,0],'far':fwd?[7,0]:[9,2]};
+  const key=$('pre').value;
+  if(exp[key]&&instrs.map(i=>i.raw.trim()).join('|')===PRESET[key].split('\n').map(l=>l.trim()).join('|')){
+    const [tc,ts]=exp[key];
+    const ok5=res.total===tc&&res.stallsTotal===ts;
+    rows.push(['예제 '+key+' 기대값','사이클 '+tc+'·스톨 '+ts+' (실제 '+res.total+'·'+res.stallsTotal+')',ok5]); all&=ok5;
+  }
+
+  let h=''; for(const [k,v,ok] of rows)
+    h+='<div class="chk"><span>'+k+'</span><span class="'+(ok?'ok':'bad')+'">'+v+(ok?' ✓ PASS':' ✗ FAIL')+'</span></div>';
+  h+='<div class="chk"><span><b>RESULT</b></span><span class="'+(all?'ok':'bad')+'">'+(all?'ALL PASS':'FAIL')+'</span></div>';
+  $('checks').innerHTML=h;
+}
+
+/* ---------- 이벤트 ---------- */
+function setFwd(v){STATE.fwd=v;
+  $('fwOn').classList.toggle('on',v); $('fwOff').classList.toggle('on',!v); render();}
+$('fwOn').onclick=()=>setFwd(true);
+$('fwOff').onclick=()=>setFwd(false);
+$('pre').onchange=()=>{$('code').value=PRESET[$('pre').value];render();};
+$('code').oninput=render;
+setFwd(true);
+</script>
+</body>
+</html>

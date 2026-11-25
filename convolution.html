@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>컨볼루션 — 뒤집기 · 이동 · 곱하기 · 적분</title>
+<style>
+  :root{ --bg:#0f1216; --panel:#161b22; --line:#2a323d; --txt:#e6edf3; --dim:#9aa7b4;
+         --acc:#58a6ff; --warn:#f0883e; --ok:#3fb950; --red:#f85149; --pur:#bc8cff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+       padding:16px 14px 40px;-webkit-text-size-adjust:100%}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .grid{display:grid;gap:9px}
+  .fld{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
+  .fld label{display:block;font-size:11px;color:var(--dim);margin-bottom:2px}
+  .fld input,.fld select{width:100%;background:transparent;border:0;color:var(--txt);font:inherit;font-size:14px;outline:none;padding:0}
+  .fld input[type=range]{padding:0;height:26px;accent-color:var(--acc)}
+  .sec{font-size:12px;color:var(--dim);margin:2px 0 6px;letter-spacing:.02em}
+  svg{width:100%;height:auto;display:block;background:var(--bg);border-radius:8px}
+  .vals{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:9px}
+  .v{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+  .v .k{font-size:11px;color:var(--dim)} .v .n{font-size:16px;font-variant-numeric:tabular-nums}
+  .v .u{font-size:11px;color:var(--dim)}
+  .v.hi{border-color:var(--acc)}
+  .chk{font-size:12.5px;display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .chk:last-child{border-bottom:0}
+  .ok{color:var(--ok)} .bad{color:var(--warn)}
+  .note{font-size:12.5px;color:var(--dim);margin-top:8px}
+  .note b{color:var(--txt)}
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px}
+  .step{border:1px solid var(--line);border-radius:9px;padding:7px 9px;font-size:12.5px;color:var(--dim)}
+  .step b{color:var(--txt);display:block;font-size:12px;margin-bottom:2px}
+  .step.on{border-color:var(--acc);color:var(--txt)}
+  .pill{font-size:12.5px;font-weight:700;padding:4px 12px;border-radius:999px;border:1px solid var(--acc);color:var(--acc)}
+</style>
+</head>
+<body>
+
+<h1>컨볼루션 y(t) = x(t) * h(t)</h1>
+<div class="sub">신호및시스템 · LTI 시스템의 출력 — 뒤집기 → 이동 → 곱하기 → 적분, 네 단계를 직접 밀어보기</div>
+
+<div class="card">
+  <div class="grid" style="grid-template-columns:2fr 2fr 1fr">
+    <div class="fld"><label>입력 x(t)</label>
+      <select id="xs">
+        <option value="rect2">사각 펄스 [0, 2]</option>
+        <option value="rect1">좁은 사각 펄스 [0, 1]</option>
+        <option value="cos">cos(3πt)·펄스 [0, 2]</option>
+      </select></div>
+    <div class="fld"><label>임펄스 응답 h(t)</label>
+      <select id="hs">
+        <option value="rect3">사각 펄스 [0, 3]</option>
+        <option value="rect05">사각 펄스 [0, 0.5] (이동평균)</option>
+        <option value="exp">e⁻ᵗ·u(t) (1차 RC)</option>
+      </select></div>
+    <div class="fld"><label>Δ (격자)</label>
+      <select id="dt">
+        <option value="0.02">0.02</option>
+        <option value="0.05">0.05</option>
+        <option value="0.01">0.01</option>
+      </select></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="steps">
+    <div class="step" id="s1"><b>① 뒤집기</b>h(−t)</div>
+    <div class="step" id="s2"><b>② 이동</b>τ만큼 밀기 → h(τ−t)</div>
+    <div class="step" id="s3"><b>③ 곱하기</b>x(t)·h(τ−t)</div>
+    <div class="step" id="s4"><b>④ 적분</b>면적 = y(τ)</div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr 130px;align-items:center;gap:9px">
+    <div class="fld"><label>이동량 τ (직접 끌어보기)</label>
+      <input id="tau" type="range" min="-3" max="9" step="0.02" value="1.5"></div>
+    <div class="fld"><label>τ 값</label><input id="tauv" type="number" step="0.01" value="1.5"></div>
+  </div>
+  <div class="note" id="narr" style="margin-top:10px"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">입력 신호 x(t) · 임펄스 응답 h(t)</div>
+  <svg id="inSvg" viewBox="0 0 940 200"></svg>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">③ 겹침 — x(t) 위에 뒤집어 밀어낸 h(τ−t) · 곱한 영역 음영</div>
+  <svg id="ovSvg" viewBox="0 0 940 260"></svg>
+  <div class="vals" id="ovVals" style="margin-top:10px"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">출력 y(τ) — 전체 곡선과 현재 위치</div>
+  <svg id="outSvg" viewBox="0 0 940 300"></svg>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">검산</div>
+  <div id="checks"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+/* 10진 양자화: 부동소수점 경계 오차를 없애 양쪽 순서의 판정을 일치시킴 */
+const q=v=>Math.round(v*1e10)/1e10;
+const fmt=(v,d)=>{d=(d===undefined)?3:d;
+  return v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});};
+
+/* ---------- 신호 정의 ---------- */
+const SIG={
+  rect1:{f:t=>(t>=0&&t<=1)?1:0, d:'u(t)−u(t−1) 폭 1'},
+  rect2:{f:t=>(t>=0&&t<=2)?1:0, d:'u(t)−u(t−2) 폭 2'},
+  rect3:{f:t=>(t>=0&&t<=3)?1:0, d:'u(t)−u(t−3) 폭 3'},
+  rect05:{f:t=>(t>=0&&t<=0.5)?1:0, d:'폭 0.5 이동평균'},
+  exp:{f:t=>t<0?0:Math.exp(-t), d:'e⁻ᵗ·u(t)'},
+  cos:{f:t=>(t>=0&&t<=2)?Math.cos(3*Math.PI*t):0, d:'cos(3πt)·[0,2]'}
+};
+const T0=-3, T1=9;
+
+function grid(dt){const n=Math.round((T1-T0)/dt);const a=[];
+  for(let i=0;i<=n;i++)a.push(q(T0+i*dt));return a;}
+
+/* 이산 컨볼루션: y(τ)=Σ x(k)h(τ−k)Δ — verify_convolution.py와 같은 식 */
+function conv(xf,hf,dt){
+  const g=grid(dt), y={};
+  for(const tau of g){
+    let s=0;
+    for(const k of g){ const hv=hf(q(tau-k)); if(hv!==0){ const xv=xf(q(k)); if(xv!==0) s+=xv*hv*dt; } }
+    y[tau]=s;
+  }
+  return y;
+}
+
+/* ---------- SVG 헬퍼 ---------- */
+function mk(tag,attrs){const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+const AX={x0:64,x1:928,y0:24,y1:170};   // in/out 공용 축 범위
+function tx(t,T0,T1,x0,x1){return x0+(t-T0)/(T1-T0)*(x1-x0);}
+function pathFrom(f,Y0,Y1,ymax){
+  const dt=0.02; let d='';
+  for(let t=T0;t<=T1+1e-9;t+=dt){
+    const x=tx(t,T0,T1,AX.x0,AX.x1), y=Y1-(f(t)/ymax)*(Y1-Y0)*0.92;
+    d+=(d?'L':'M')+x.toFixed(1)+' '+y.toFixed(1);
+  }
+  return d;
+}
+
+function drawInputs(xf,hf){
+  const s=$('inSvg'); s.innerHTML='';
+  const xmid=940, yA={y0:14,y1:88}, yB={y0:104,y1:178};
+  for(const [f,lab,col,Y] of [[xf,'x(t)','#58a6ff',yA],[hf,'h(t)','#bc8cff',yB]]){
+    s.appendChild(mk('line',{x1:AX.x0,y1:Y.y1,x2:AX.x1,y2:Y.y1,stroke:'#2a323d'}));
+    s.appendChild(mk('line',{x1:AX.x0,y1:Y.y0,x2:AX.x0,y2:Y.y1,stroke:'#2a323d'}));
+    s.appendChild(mk('text',{x:AX.x0-8,y:Y.y0+10,fill:'#9aa7b4','font-size':12,'text-anchor':'end'})).textContent='1';
+    const ymax=(f===SIG.cos.f)?1.4:1.2;
+    s.appendChild(mk('path',{d:pathFrom(f,Y.y0,Y.y1,ymax),fill:'none',stroke:col,'stroke-width':2.2}));
+    s.appendChild(mk('text',{x:AX.x0+6,y:Y.y0+12,fill:col,'font-size':13,'font-weight':700})).textContent=lab;
+  }
+  for(const t of [0,2,4,6,8]){
+    s.appendChild(mk('text',{x:tx(t,T0,T1,AX.x0,AX.x1),y:196,fill:'#9aa7b4','font-size':11,'text-anchor':'middle'})).textContent=t;
+  }
+}
+
+function drawOverlap(xf,hf,tau,dt,area){
+  const s=$('ovSvg'); s.innerHTML='';
+  const Y={y0:26,y1:210};
+  s.appendChild(mk('line',{x1:AX.x0,y1:Y.y1,x2:AX.x1,y2:Y.y1,stroke:'#2a323d'}));
+  s.appendChild(mk('line',{x1:AX.x0,y1:Y.y0,x2:AX.x0,y2:Y.y1,stroke:'#2a323d'}));
+  const ymax=1.4, py=v=>Y.y1-(v/ymax)*(Y.y1-Y.y0)*0.92;
+  /* ③ 곱한 영역 음영 */
+  let dArea='';
+  for(let t=T0;t<=T1;t+=dt){
+    const p=xf(t)*hf(tau-t);
+    const x=tx(t,T0,T1,AX.x0,AX.x1);
+    if(t===T0||p<=0&&xf(t-dt)*hf(tau-t-dt)>0){} // no-op, 아래에서 연속 경로 처리
+    if(p>0){ if(!dArea) dArea='M'+x.toFixed(1)+' '+Y.y1.toFixed(1);
+      dArea+='L'+x.toFixed(1)+' '+py(p).toFixed(1);}
+    else if(dArea){ dArea+='L'+x.toFixed(1)+' '+Y.y1.toFixed(1); }
+  }
+  if(dArea) s.appendChild(mk('path',{d:dArea+'Z',fill:'rgba(63,185,80,.28)',stroke:'none'}));
+  /* x(t) */
+  s.appendChild(mk('path',{d:pathFrom(xf,Y.y0,Y.y1,ymax),fill:'none',stroke:'#58a6ff','stroke-width':2.2}));
+  /* h(τ−t) */
+  const hflip=t=>hf(tau-t);
+  s.appendChild(mk('path',{d:pathFrom(hflip,Y.y0,Y.y1,ymax),fill:'none',stroke:'#f0883e','stroke-width':2.2,'stroke-dasharray':'7 4'}));
+  s.appendChild(mk('text',{x:AX.x0+6,y:Y.y0+12,fill:'#58a6ff','font-size':13,'font-weight':700})).textContent='x(t)';
+  s.appendChild(mk('text',{x:AX.x1-118,y:Y.y0+12,fill:'#f0883e','font-size':13,'font-weight':700})).textContent='h(τ−t)';
+  /* τ 축 표시 */
+  const xT=tx(tau,T0,T1,AX.x0,AX.x1);
+  s.appendChild(mk('line',{x1:xT,y1:Y.y1,x2:xT,y2:Y.y1+8,stroke:'#f0883e','stroke-width':2}));
+  s.appendChild(mk('text',{x:xT,y:Y.y1+22,fill:'#f0883e','font-size':12,'text-anchor':'middle'})).textContent='τ='+fmt(tau,2);
+  for(const t of [0,2,4,6,8])
+    s.appendChild(mk('text',{x:tx(t,T0,T1,AX.x0,AX.x1),y:Y.y1+36,fill:'#9aa7b4','font-size':11,'text-anchor':'middle'})).textContent=t;
+}
+
+function drawOut(y,tau,ymax){
+  const s=$('outSvg'); s.innerHTML='';
+  const Y={y0:24,y1:246};
+  s.appendChild(mk('line',{x1:AX.x0,y1:Y.y1,x2:AX.x1,y2:Y.y1,stroke:'#2a323d'}));
+  s.appendChild(mk('line',{x1:AX.x0,y1:Y.y0,x2:AX.x0,y2:Y.y1,stroke:'#2a323d'}));
+  s.appendChild(mk('text',{x:AX.x0-8,y:Y.y0+10,fill:'#9aa7b4','font-size':11,'text-anchor':'end'})).textContent=fmt(ymax,2);
+  let d='';
+  const ks=Object.keys(y).map(Number).sort((a,b)=>a-b);
+  for(const t of ks){
+    const x=tx(t,T0,T1,AX.x0,AX.x1), v=Math.max(0,y[t]);
+    const yy=Y.y1-(v/ymax)*(Y.y1-Y.y0)*0.92;
+    d+=(d?'L':'M')+x.toFixed(1)+' '+yy.toFixed(1);
+  }
+  s.appendChild(mk('path',{d,fill:'none',stroke:'#3fb950','stroke-width':2.4}));
+  /* 현재 τ 마커 */
+  const xT=tx(tau,T0,T1,AX.x0,AX.x1);
+  const v=Math.max(0,y[+tau.toFixed(2)]!==undefined?y[+tau.toFixed(2)]:interpY(y,tau));
+  const yM=Y.y1-(v/ymax)*(Y.y1-Y.y0)*0.92;
+  s.appendChild(mk('line',{x1:xT,y1:Y.y0,x2:xT,y2:Y.y1,stroke:'#58a6ff','stroke-width':1.4,'stroke-dasharray':'4 4'}));
+  s.appendChild(mk('circle',{cx:xT,cy:yM,r:6,fill:'#58a6ff'}));
+  s.appendChild(mk('text',{x:xT+10,y:yM-10,fill:'#58a6ff','font-size':13,'font-weight':700}))
+    .textContent='y('+fmt(tau,2)+')='+fmt(v,3);
+  s.appendChild(mk('text',{x:AX.x0+6,y:Y.y0+12,fill:'#3fb950','font-size':13,'font-weight':700})).textContent='y(τ)';
+  for(const t of [0,2,4,6,8])
+    s.appendChild(mk('text',{x:tx(t,T0,T1,AX.x0,AX.x1),y:Y.y1+18,fill:'#9aa7b4','font-size':11,'text-anchor':'middle'})).textContent=t;
+  s.appendChild(mk('text',{x:(AX.x0+AX.x1)/2,y:Y.y1+34,fill:'#9aa7b4','font-size':11,'text-anchor':'middle'})).textContent='τ';
+}
+
+function interpY(y,tau){ // 겨자 사이 τ: 이웃 값 평균
+  const ks=Object.keys(y).map(Number).sort((a,b)=>a-b);
+  for(let i=1;i<ks.length;i++) if(ks[i]>=tau){
+    const a=ks[i-1],b=ks[i],f=(tau-a)/(b-a||1); return y[a]*(1-f)+y[b]*f;
+  }
+  return 0;
+}
+
+/* ---------- 해석해 (검산용) ---------- */
+function analytic(xk,hk,tau){
+  // 사각펄스는 닫힌협, 그 외는 null  (x=[a,b], h=[0,w] → 겹침 = min(b,τ)−max(a,τ−w))
+  const len=(a,b,w,tau)=>Math.max(0, Math.min(b,tau)-Math.max(a,tau-w));
+  if(xk==='rect2'&&hk==='rect3') return len(0,2,3,tau);           // 사다리꼴
+  if(xk==='rect1'&&hk==='rect3') return len(0,1,3,tau);
+  if(xk==='rect2'&&hk==='rect05') return len(0,2,0.5,tau);
+  if(xk==='rect1'&&hk==='rect05') return len(0,1,0.5,tau);
+  if(xk==='rect2'&&hk==='exp'){                                  // (1−e⁻ᵗ)u, e⁻ᵗ⁺²(1−e⁻²) …
+    if(tau<=0) return 0;
+    if(tau<=2) return 1-Math.exp(-tau);
+    return Math.exp(-(tau-2))*(1-Math.exp(-2));
+  }
+  if(xk==='rect1'&&hk==='exp'){
+    if(tau<=0) return 0;
+    if(tau<=1) return 1-Math.exp(-tau);
+    return Math.exp(-(tau-1))*(1-Math.exp(-1));
+  }
+  return null;
+}
+
+/* ---------- 렌더 ---------- */
+let CUR={};
+function render(){
+  const xk=$('xs').value, hk=$('hs').value, dt=parseFloat($('dt').value);
+  const xf=SIG[xk].f, hf=SIG[hk].f;
+  let tau=parseFloat($('tau').value);
+  if(isNaN(tau)){tau=1.5;$('tau').value=tau;}
+  $('tauv').value=fmt(tau,2);
+
+  const y=conv(xf,hf,dt);
+  CUR={y,xf,hf,dt,xk,hk};
+  const area=y[+tau.toFixed(2)]!==undefined?y[+tau.toFixed(2)]:interpY(y,tau);
+
+  drawInputs(xf,hf);
+  drawOverlap(xf,hf,tau,dt,area);
+  const ymax=Math.max(...Object.values(y).map(v=>Math.abs(v)))*1.15||1;
+  drawOut(y,tau,ymax);
+
+  /* 네 단계 강조: τ 위치에 따른 상태 */
+  const on=(id,c)=>$(id).classList.toggle('on',c);
+  const xs=[$('s1'),$('s2'),$('s3'),$('s4')];
+  xs.forEach(e=>e.classList.add('on')); // 항상 4단계 동시 진행 — 색만으로 의미 전달
+
+  /* 겹침 영역 수치 */
+  const ov=[...Object.keys(y).map(Number)].filter(t=>xf(t)*hf(tau-t)>0);
+  let rng='겹치는 구간 없음';
+  if(ov.length) rng='['+fmt(Math.min(...ov),2)+', '+fmt(Math.max(...ov),2)+']';
+  $('ovVals').innerHTML=
+    '<div class="v hi"><div class="k">현재 면적 (③·④의 결과)</div><div class="n">'+fmt(area,4)+'</div><div class="u">y(τ)</div></div>'+
+    '<div class="v"><div class="k">③ 곱의 지지 구간</div><div class="n" style="font-size:13px">'+rng+'</div><div class="u">t</div></div>'+
+    '<div class="v"><div class="k">② h 뒤집힘 위치</div><div class="n" style="font-size:13px">[τ−'+supH(hk)+']</div><div class="u">h(τ−t)</div></div>';
+  $('narr').innerHTML='지금 <b>τ='+fmt(tau,2)+'</b>: h를 y축으로 뒤집어(①) 오른쪽으로 <b>'+fmt(tau,2)+'</b>만큼 이동(②) → x(t)와 곱해 음영(③) → 그 면적 <b>'+fmt(area,3)+'</b>이 y(τ)(④). 슬라이더를 밀면서 음영 면적이 y 곡선 위 점과 같이 움직이는 걸 확인.';
+
+  buildChecks(xk,hk,dt);
+}
+function supH(hk){return {'rect3':'3','rect05':'0.5','exp':'∞'}[hk];}
+
+function buildChecks(xk,hk,dt){
+  const rows=[]; let all=true;
+  /* 1. 해석해와 대조 (닫힌협이 있는 조합만) */
+  const an=analytic(xk,hk,null);
+  if(an!==null){
+    const y=CUR.y; let emax=0;
+    for(const t of Object.keys(y).map(Number)){
+      const a=analytic(xk,hk,t);
+      if(a!==null) emax=Math.max(emax,Math.abs(y[t]-a));
+    }
+    const ok=emax<dt*1.2+1e-9;   /* 경계 격자 포함 관례 → 오차 ≤ Δ */
+    rows.push(['이산 합 Σ x·h·Δ vs 해석해 (전 구간)', '최대 오차 '+emax.toExponential(2), ok]);
+    all&=ok;
+  } else {
+    rows.push(['해석해 대조', '이 조합은 닫힌협 없음 — 그래프로 확인', null]);
+  }
+  /* 2. 교환법칙 x*h = h*x */
+  const yx=conv(CUR.xf,CUR.hf,dt), yh=conv(CUR.hf,CUR.xf,dt);
+  let em=0; for(const t of Object.keys(yx)) em=Math.max(em,Math.abs(yx[t]-yh[t]));
+  const okc=em<1e-9;
+  rows.push(['교환법칙 x*h = h*x','최대 오차 '+em.toExponential(2),okc]);
+  all&=okc;
+  /* 3. Δ 정합성: Δ를 절반으로 줄이면 같은 해로 수렴 */
+  const y2=conv(CUR.xf,CUR.hf,dt/2); let em2=0;
+  for(const t of Object.keys(y2).map(Number))
+    if(CUR.y[t]!==undefined) em2=Math.max(em2,Math.abs(y2[t]-CUR.y[t]));
+  const okr=em2<dt*0.7+5e-4;   /* 1차 수렴: Δ 절반 → 오차 절반 */
+  rows.push(['격자 절반(Δ/2) 수렴','최대 차이 '+em2.toExponential(2),okr]);
+  all&=okr;
+
+  let h=''; for(const [k,v,ok] of rows){
+    h+='<div class="chk"><span>'+k+'</span><span class="'+(ok===null?'':ok?'ok':'bad')+'">'+v+
+       (ok===null?'':ok?' ✓ PASS':' ✗ FAIL')+'</span></div>';
+  }
+  h+='<div class="chk"><span><b>RESULT</b></span><span class="'+(all?'ok':'bad')+'">'+(all?'ALL PASS':'FAIL')+'</span></div>';
+  $('checks').innerHTML=h;
+}
+
+/* 이벤트 */
+$('xs').onchange=render; $('hs').onchange=render; $('dt').onchange=render;
+$('tau').oninput=()=>{ $('tauv').value=fmt(parseFloat($('tau').value),2); render(); };
+$('tauv').onchange=()=>{ let v=parseFloat($('tauv').value);
+  if(!isNaN(v)){$('tau').value=Math.min(9,Math.max(-3,v));} render(); };
+render();
+</script>
+</body>
+</html>

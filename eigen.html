@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>고유값·고유벡터 — 선형변환의 불변 방향</title>
+<style>
+  :root{ --bg:#0f1216; --panel:#161b22; --line:#2a323d; --txt:#e6edf3; --dim:#9aa7b4;
+         --acc:#58a6ff; --warn:#f0883e; --ok:#3fb950; --red:#f85149; --pur:#bc8cff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+       padding:16px 14px 40px;-webkit-text-size-adjust:100%}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .grid{display:grid;gap:9px}
+  .fld{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
+  .fld label{display:block;font-size:11px;color:var(--dim);margin-bottom:2px}
+  .fld input,.fld select{width:100%;background:transparent;border:0;color:var(--txt);font:inherit;font-size:14px;outline:none;padding:0}
+  .vals{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:9px}
+  .v{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+  .v .k{font-size:11px;color:var(--dim)} .v .n{font-size:16px;font-variant-numeric:tabular-nums}
+  .v .u{font-size:11px;color:var(--dim)}
+  .v.hi{border-color:var(--acc)}
+  .pill{font-size:13px;font-weight:700;padding:4px 12px;border-radius:999px;border:1px solid;
+        display:inline-block;margin-bottom:8px}
+  .pill.real{color:#3fb950;border-color:#3fb950}
+  .pill.cplx{color:#f0883e;border-color:#f0883e}
+  .pill.hit{color:#58a6ff;border-color:#58a6ff}
+  .chk{font-size:12.5px;display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .chk:last-child{border-bottom:0}
+  .ok{color:var(--ok)} .bad{color:var(--warn)}
+  .note{font-size:12.5px;color:var(--dim);margin-top:8px}
+  .note b{color:var(--txt)}
+  svg{width:100%;height:auto;display:block;background:var(--bg);border-radius:8px}
+</style>
+</head>
+<body>
+
+<h1>고유값 · 고유벡터 — 선형변환 A의 불변 방향</h1>
+<div class="sub">선형대수 · 단위원을 A로 변환해보기 · 고유방향에서만은 Av = λv로 방향이 보존된다</div>
+
+<div class="card">
+  <div class="grid" style="grid-template-columns:1fr 2fr">
+    <div class="fld"><label>예제 행렬</label>
+      <select id="pre">
+        <option value="shear">전단 (x축 밀기)</option>
+        <option value="scale">비대칭 스케일</option>
+        <option value="refl">x축 반사</option>
+        <option value="rot">회전 30° (복소 고유값)</option>
+        <option value="rotsh">회전+축소 (복소)</option>
+        <option value="jordan">중근 (완비 아님)</option>
+        <option value="id">단위행렬</option>
+      </select></div>
+    <div class="grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="fld"><label>a = A₁₁</label><input id="a" type="number" step="0.01" value="1"></div>
+      <div class="fld"><label>b = A₁₂</label><input id="b" type="number" step="0.01" value="0.60"></div>
+      <div class="fld"><label>c = A₂₁</label><input id="c" type="number" step="0.01" value="0"></div>
+      <div class="fld"><label>d = A₂₂</label><input id="d" type="number" step="0.01" value="1"></div>
+    </div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr 110px;margin-top:9px;align-items:center">
+    <div class="fld"><label>입력 벡터 v의 각도 θ (직접 끌어보기)</label>
+      <input id="th" type="range" min="0" max="360" step="1" value="25"></div>
+    <div class="fld"><label>θ (°)</label><input id="thv" type="number" step="1" value="25"></div>
+  </div>
+</div>
+
+<div class="card"><div id="status"></div><div class="vals" id="vals"></div></div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">
+    왼쪽: 입력 공간 (단위원 · v · 고유방향) — 오른쪽: A가 변환한 세계 (타원 · Av)</div>
+  <svg id="pan" viewBox="0 0 940 430"></svg>
+  <div class="note" id="narr"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">검산</div>
+  <div id="checks"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const fmt=(v,d)=>{d=(d===undefined)?3:d;
+  return v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});};
+
+const PRESET={
+  shear:[1,0.6,0,1], scale:[2,0,0,0.5], refl:[1,0,0,-1],
+  rot:[Math.cos(Math.PI/6),-Math.sin(Math.PI/6),Math.sin(Math.PI/6),Math.cos(Math.PI/6)],
+  rotsh:[0.8*Math.cos(0.7),-0.8*Math.sin(0.7),0.8*Math.sin(0.7),0.8*Math.cos(0.7)],
+  jordan:[2,1,0,2], id:[1,0,0,1]};
+
+function P(){return {a:parseFloat($('a').value)||0,b:parseFloat($('b').value)||0,
+                    c:parseFloat($('c').value)||0,d:parseFloat($('d').value)||0};}
+function mul(A,v){return [A.a*v[0]+A.b*v[1], A.c*v[0]+A.d*v[1]];}
+
+/* 고유값: 특성다항식 λ² − tr λ + det = 0 */
+function eig(A){
+  const tr=A.a+A.d, det=A.a*A.d-A.b*A.c, D=tr*tr-4*det;
+  if(D<-1e-12){
+    const re=tr/2, im=Math.sqrt(-D)/2;
+    return {type:'complex', re, im, tr, det, D,
+            abs:Math.hypot(re,im), ang:Math.atan2(A.c-A.b, A.a+A.d)};
+  }
+  const s=Math.sqrt(Math.max(0,D));
+  const l1=(tr+s)/2, l2=(tr-s)/2;
+  /* 고유벡터: (A−λI)의 행 중 더 큰 쪽 */
+  function vec(l){
+    const r1=[A.a-l,A.b], r2=[A.c,A.d-l];
+    const n1=Math.hypot(r1[0],r1[1]), n2=Math.hypot(r2[0],r2[1]);
+    if(Math.max(n1,n2)<1e-9) return null;          /* A=λI */
+    const row=n1>=n2?r1:r2;
+    return [-row[1], row[0]];      /* 영공간: (A−λI)v=0 → 선택한 행에 수직 */
+  }
+  const v1=vec(l1), v2=vec(l2);
+  return {type:'real', l1, l2, v1, v2, tr, det, D};
+}
+
+/* ---------- SVG ---------- */
+function mk(tag,attrs){const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+const S=68;                       /* px per unit */
+const C1=[235,215], C2=[705,215]; /* 두 패널 중심 */
+function toP(p,c){return [c[0]+p[0]*S, c[1]-p[1]*S];}
+function arrow(s,from,to,color,w){
+  s.appendChild(mk('line',{x1:from[0],y1:from[1],x2:to[0],y2:to[1],stroke:color,'stroke-width':w}));
+  const ang=Math.atan2(to[1]-from[1],to[0]-from[0]), L=9;
+  s.appendChild(mk('polygon',{points:to[0]+','+to[1]+' '+(to[0]-L*Math.cos(ang-0.42))+','+(to[1]-L*Math.sin(ang-0.42))+
+    ' '+(to[0]-L*Math.cos(ang+0.42))+','+(to[1]-L*Math.sin(ang+0.42)),fill:color}));
+}
+function frame(s,c){
+  s.appendChild(mk('line',{x1:c[0]-190,y1:c[1],x2:c[0]+190,y2:c[1],stroke:'#2a323d'}));
+  s.appendChild(mk('line',{x1:c[0],y1:c[1]-180,x2:c[0],y2:c[1]+180,stroke:'#2a323d'}));
+}
+function label(s,x,y,t,color){
+  const e=mk('text',{x,y,fill:color||'#9aa7b4','font-size':12}); e.textContent=t; s.appendChild(e);
+}
+
+function draw(A,E,th){
+  const s=$('pan'); s.innerHTML='';
+  frame(s,C1); frame(s,C2);
+  /* 단위원 */
+  s.appendChild(mk('circle',{cx:C1[0],cy:C1[1],r:S,fill:'none',stroke:'#30363d','stroke-width':1.4}));
+  /* 변환 타원: A·(cosφ,sinφ) */
+  let d='';
+  for(let i=0;i<=72;i++){
+    const f=i/72*2*Math.PI, p=toP(mul(A,[Math.cos(f),Math.sin(f)]),C2);
+    d+=(d?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1);
+  }
+  s.appendChild(mk('path',{d,fill:'none',stroke:'#30363d','stroke-width':1.4}));
+  /* 기저벡터 e1,e2 → Ae1,Ae2 */
+  const e1=toP([1,0],C1), e2=toP([0,1],C1);
+  arrow(s,C1,e1,'#58a6ff',1.2); arrow(s,C1,e2,'#bc8cff',1.2);
+  label(s,e1[0]+6,e1[1]-6,'e₁','#58a6ff'); label(s,e2[0]+8,e2[1],'e₂','#bc8cff');
+  arrow(s,C2,toP(mul(A,[1,0]),C2),'#58a6ff',1.2);
+  arrow(s,C2,toP(mul(A,[0,1]),C2),'#bc8cff',1.2);
+  /* 고유방향 (실수일 때만) */
+  if(E.type==='real'){
+    for(const [v,lab] of [[E.v1,'v₁'],[E.v2,'v₂']]){
+      if(!v) continue;
+      const u=Math.hypot(v[0],v[1]); if(u<1e-9) continue;
+      const p1=toP([v[0]/u*2.4, v[1]/u*2.4], C1), p2=toP([v[0]/u*2.4, v[1]/u*2.4], C2);
+      s.appendChild(mk('line',{x1:C1[0]*2-p1[0],y1:C1[1]*2-p1[1],x2:p1[0],y2:p1[1],stroke:'#f85149','stroke-width':1.3,'stroke-dasharray':'8 5'}));
+      s.appendChild(mk('line',{x1:C2[0]*2-p2[0],y1:C2[1]*2-p2[1],x2:p2[0],y2:p2[1],stroke:'#f85149','stroke-width':1.3,'stroke-dasharray':'8 5'}));
+      label(s,p1[0]+6,p1[1]-6,lab,'#f85149'); label(s,p2[0]+6,p2[1]-6,'λ'+lab,'#f85149');
+    }
+  }
+  /* 현재 v와 Av */
+  const thR=th*Math.PI/180;
+  const v=[Math.cos(thR),Math.sin(thR)], Av=mul(A,v);
+  arrow(s,C1,toP(v,C1),'#3fb950',2.4);
+  arrow(s,C2,toP(Av,C2),'#3fb950',2.4);
+  label(s,C1[0]+8,C1[1]-170,'입력 v(θ)','#3fb950');
+  label(s,C2[0]+8,C2[1]-170,'A v','#3fb950');
+  return {v,Av};
+}
+
+function angDiff(u,w){ /* 방향(±) 무시 각도차 */
+  let a=Math.atan2(w[1],w[0])-Math.atan2(u[1],u[0]);
+  a=(a+Math.PI)%(2*Math.PI)-Math.PI;
+  return Math.min(Math.abs(a),Math.abs(a+Math.PI),Math.abs(a-Math.PI));
+}
+
+function render(){
+  const A=P(), E=eig(A);
+  const th=parseFloat($('th').value); $('thv').value=th;
+  const {v,Av}=draw(A,E,th);
+
+  /* 상태 문구 */
+  let pill, vals='';
+  if(E.type==='complex'){
+    pill='<span class="pill cplx">복소 고유값 — 실수 고유방향 없음 (회전 성분)</span>';
+    vals+='<div class="v hi"><div class="k">λ</div><div class="n" style="font-size:14px">'+fmt(E.re,2)+' ± '+fmt(E.im,2)+'i</div><div class="u">|λ|='+fmt(E.abs,3)+'</div></div>';
+    vals+='<div class="v"><div class="k">회전각 θ</div><div class="n">'+fmt(E.ang*180/Math.PI,1)+'°</div><div class="u">회전+|λ|배 축척</div></div>';
+  }else{
+    const f=(l,vv)=>'<div class="v hi"><div class="k">λ = '+fmt(l,3)+'</div><div class="n" style="font-size:13px">'+
+      (vv?('방향 ('+fmt(vv[0]/Math.max(Math.abs(vv[0]),Math.abs(vv[1]),1e-9),2)+' : '+fmt(vv[1]/Math.max(Math.abs(vv[0]),Math.abs(vv[1]),1e-9),2)+')'):'(A=λI·모든 방향)')+'</div><div class="u">고유벡터 비율</div></div>';
+    pill='<span class="pill real">실수 고유값 — 빨간 점선이 불변 방향</span>';
+    vals+=f(E.l1,E.v1)+f(E.l2,E.v2);
+    /* 정렬 감지 */
+    let hit=null;
+    for(const [vv,l] of [[E.v1,E.l1],[E.v2,E.l2]]){
+      if(!vv) continue;
+      if(angDiff(v,vv)<0.035) hit=l;
+    }
+    if(hit!==null) pill='<span class="pill hit">🎯 v가 고유방향! Av = λv 성립 (λ='+fmt(hit,3)+')</span>';
+  }
+  const degAv=Math.atan2(Av[1],Av[0])*180/Math.PI;
+  $('status').innerHTML=pill+
+    '<div class="note" style="margin:0 0 8px">현재 θ='+th+'° · v와 Av의 방향차 <b>'+fmt(angDiff(v,Av)*180/Math.PI,1)+'°</b>'+
+    ' · |Av|='+fmt(Math.hypot(Av[0],Av[1]),3)+'</div>';
+  vals+='<div class="v"><div class="k">det A = λ₁λ₂</div><div class="n">'+fmt(E.det,3)+'</div><div class="u">면적 배율</div></div>'+
+        '<div class="v"><div class="k">tr A = λ₁+λ₂</div><div class="n">'+fmt(E.tr,3)+'</div><div class="u">특성다항식 계수</div></div>';
+  $('vals').innerHTML=vals;
+  $('narr').innerHTML='슬라이더를 돌려보라: 대부분의 방향에서는 <b>Av가 v와 다른 방향</b>으로 꺾인다. '+
+    (E.type==='real'?'빨간 점선(고유방향)만은 <b>Av가 v와 일직선(λ배)</b>이 된다. 왼쪽 원이 오른쪽 타원으로 찌그러지는 동안 그 반직선들만 방향을 유지한다.'
+                    :'이 행렬은 회전 성분이 있어 <b>어떤 실수 방향도 유지되지 않는다</b> (고유값이 복소수). 타원이 원의 회전+축소판이 되는 걸 확인.');
+
+  buildChecks(A,E);
+}
+
+function buildChecks(A,E){
+  const rows=[]; let all=true;
+  const cp=l=>{ const re=l*l-E.tr*l+E.det;
+    return E.type==='complex' ? Math.hypot(E.re*E.re-E.im*E.im-E.tr*E.re+E.det, (2*E.re-E.tr)*E.im)
+                              : Math.abs(re); };
+  const e1=cp(E.type==='complex'?{re:E.re,im:0}:E.l1), e2=cp(E.type==='complex'?null:E.l2);
+  const ok1=e1<1e-9&&(E.type==='complex'||e2<1e-9);
+  rows.push(['λ² − tr·λ + det = 0 대입 잔차','max '+Math.max(e1,e2).toExponential(1),ok1]); all&=ok1;
+
+  if(E.type==='real'){
+    let worst=0;
+    for(const [l,vv] of [[E.l1,E.v1],[E.l2,E.v2]]){
+      if(!vv) continue;
+      const Avv=mul(A,vv), r=Math.hypot(Avv[0]-l*vv[0],Avv[1]-l*vv[1])/Math.hypot(vv[0],vv[1]);
+      worst=Math.max(worst,r);
+    }
+    const ok2=worst<1e-9;
+    rows.push(['‖Av − λv‖ / ‖v‖','max '+worst.toExponential(1),ok2]); all&=ok2;
+  }else{
+    const ok2=Math.abs(E.abs*E.abs-E.det)<1e-9;
+    rows.push(['복소 케이스 |λ|² = det',fmt(E.abs*E.abs,6)+' vs '+fmt(E.det,6),ok2]); all&=ok2;
+  }
+
+  const prod=(E.type==='complex')?E.det:E.l1*E.l2;
+  const sum=(E.type==='complex')?2*E.re:E.l1+E.l2;
+  const ok3=Math.abs(prod-E.det)<1e-12&&Math.abs(sum-E.tr)<1e-12;
+  rows.push(['Vieta: λ₁+λ₂ = tr, λ₁λ₂ = det','합·곱 일치',ok3]); all&=ok3;
+
+  let h=''; for(const [k,v,ok] of rows)
+    h+='<div class="chk"><span>'+k+'</span><span class="'+(ok?'ok':'bad')+'">'+v+(ok?' ✓ PASS':' ✗ FAIL')+'</span></div>';
+  h+='<div class="chk"><span><b>RESULT</b></span><span class="'+(all?'ok':'bad')+'">'+(all?'ALL PASS':'FAIL')+'</span></div>';
+  $('checks').innerHTML=h;
+}
+
+$('pre').onchange=()=>{const m=PRESET[$('pre').value];
+  $('a').value=m[0];$('b').value=m[1];$('c').value=m[2];$('d').value=m[3];render();};
+['a','b','c','d'].forEach(id=>$(id).onchange=render);
+$('th').oninput=()=>{$('thv').value=$('th').value;render();};
+$('thv').onchange=()=>{let v=parseInt($('thv').value,10);
+  if(!isNaN(v)){$('th').value=((v%360)+360)%360;}render();};
+render();
+</script>
+</body>
+</html>
