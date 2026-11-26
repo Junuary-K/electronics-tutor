@@ -22,6 +22,7 @@
 | `eigen.html` | 선형대수 | 2×2 고유값·고유벡터, 단위원→타원, 복소 고유값 |
 | `gauss.html` | 전자장 | 가우스 법칙 — 점·선·평면·구 대칭, 풀이 과정 |
 | `pipeline.html` | 컴퓨터구조 | 5단 파이프라인 RAW 해저드, 스톨·포워딩, CPI |
+| `ode.html` | 공학수학 | 1계 적분인자(공진), 2계 특성방정식·미정계수, RK4 대조 |
 | `index.html` | — | 도구 목록 페이지 (새 도구를 추가하면 여기에 카드를 넣는다) |
 
 ## 절대 규칙
@@ -48,6 +49,7 @@ python verify_gauss.py         # 플럭스 직접 적분=Q/ε₀·껍질 상쇄�
 python verify_pipeline.py      # 손계산 8케이스 스케줄·구조 항등식·해저드 원장부
 python verify_ohms_law.py      # MNA 노달 해석 vs 닫힌형·전력 삼경로·예제 4종 답
 python verify_maxwell.py       # 맥스웰 4종 수치 대조·쌍극자 ∮B·dA=0·I_d=I_cond·빛의 속도
+python verify_ode.py           # 닫힌형 vs RK4·특성근/특수해 잔차·교과서 감쇠 3케이스·공진
 ```
 
 모두 표준 라이브러리만 사용하고, **종료 코드 0 = 통과**입니다.

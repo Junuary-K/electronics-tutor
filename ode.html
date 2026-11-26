@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>미분방정식 해법 — 적분인자 · 특성방정식 · 미정계수</title>
+<style>
+  :root{ --bg:#0f1216; --panel:#161b22; --line:#2a323d; --txt:#e6edf3; --dim:#9aa7b4;
+         --acc:#58a6ff; --warn:#f0883e; --ok:#3fb950; --red:#f85149; --pur:#bc8cff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+       padding:16px 14px 40px;-webkit-text-size-adjust:100%}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .grid{display:grid;gap:9px}
+  .fld{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
+  .fld label{display:block;font-size:11px;color:var(--dim);margin-bottom:2px}
+  .fld input,.fld select{width:100%;background:transparent;border:0;color:var(--txt);font:inherit;font-size:14px;outline:none;padding:0}
+  .eqs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:9px;margin-bottom:4px}
+  .eq{border:1px solid var(--line);border-radius:10px;padding:8px 11px;font-size:12.5px;color:var(--dim);cursor:pointer}
+  .eq b{color:var(--txt);display:block;font-size:13px;margin-bottom:2px}
+  .eq.on{border-color:var(--acc);color:var(--txt)}
+  .formula{font-size:15px;font-family:ui-monospace,Menlo,Consolas,monospace;margin:8px 0 2px;word-break:break-all}
+  .vals{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:9px}
+  .v{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+  .v .k{font-size:11px;color:var(--dim)} .v .n{font-size:15px;font-variant-numeric:tabular-nums}
+  .v .u{font-size:11px;color:var(--dim)}
+  .v.hi{border-color:var(--acc)}
+  .pill{font-size:13px;font-weight:700;padding:4px 12px;border-radius:999px;border:1px solid;display:inline-block;margin:4px 0 8px}
+  .pill.over{color:#58a6ff;border-color:#58a6ff}
+  .pill.crit{color:#f0883e;border-color:#f0883e}
+  .pill.under{color:#3fb950;border-color:#3fb950}
+  .pill.res{color:#f85149;border-color:#f85149}
+  .chk{font-size:12.5px;display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .chk:last-child{border-bottom:0}
+  .ok{color:var(--ok)} .bad{color:var(--warn)}
+  .note{font-size:12.5px;color:var(--dim);margin-top:8px}
+  .note b{color:var(--txt)}
+  svg{width:100%;height:auto;display:block;background:var(--bg);border-radius:8px}
+  .steps{font-size:12.5px;color:var(--dim);line-height:1.9;margin-top:6px}
+  .steps b{color:var(--txt)}
+</style>
+</head>
+<body>
+
+<h1>미분방정식 해법 — 1계 적분인자 · 2계 특성방정식</h1>
+<div class="sub">공학수학 · 대표 해법 두 가지를 단계별로 · 닫힌형 해와 RK4 수치해가 일치하는지 화면에서 직접 대조</div>
+
+<div class="card">
+  <div class="eqs">
+    <div class="eq on" id="tab0" onclick="setMode(0)"><b>1계 선형 — 적분인자법</b>y' + a·y = b·e^{kt}</div>
+    <div class="eq" id="tab1" onclick="setMode(1)"><b>2계 상수계수 — 특성방정식</b>a·y'' + b·y' + c·y = f(t)</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="grid" id="ctl"></div>
+</div>
+
+<div class="card"><div id="status"></div><div class="formula" id="deq"></div><div class="vals" id="vals"></div></div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">해 곡선 — 실선(닫힌형) 위 점(RK4 수치해)이 겹쳐야 정답</div>
+  <svg id="gr" viewBox="0 0 940 320"></svg>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:4px">풀이 과정</div>
+  <div class="steps" id="steps"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">검산</div>
+  <div id="checks"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const fmt=(v,d)=>{d=(d===undefined)?3:d;
+  return v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});};
+
+let MODE=0;
+const CTL={
+ 0:[{id:'a',lab:'a (y의 계수)',min:0.5,max:5,step:0.1,val:2},
+    {id:'b',lab:'b (입력 크기)',min:-10,max:10,step:0.5,val:3},
+    {id:'k',lab:'k (입력 지수 e^{kt})',min:-3,max:3,step:0.1,val:1},
+    {id:'y0',lab:'초기조건 y(0)',min:-10,max:10,step:0.5,val:0}],
+ 1:[{id:'a',lab:'a (y″ 계수)',min:0.5,max:3,step:0.1,val:1},
+    {id:'b',lab:'b (y′ 계수)',min:-2,max:6,step:0.1,val:3},
+    {id:'c',lab:'c (y 계수)',min:0.1,max:10,step:0.1,val:2},
+    {id:'f',lab:'비제차항 f(t)',sel:[['0','없음 (동차)'],['const','상수 F'],['cos','F·cos(ωt)']],val:'0'},
+    {id:'F',lab:'F (크기)',min:0.5,max:10,step:0.5,val:4},
+    {id:'w',lab:'ω (cos 각주파수)',min:0.2,max:4,step:0.1,val:1},
+    {id:'y0',lab:'y(0)',min:-10,max:10,step:0.5,val:1},
+    {id:'y1',lab:"y'(0)",min:-10,max:10,step:0.5,val:0}]
+};
+let PAR={};
+function buildCtl(){
+  let h='';
+  CTL[MODE].forEach(c=>{
+    if(c.sel){
+      h+='<div class="fld"><label>'+c.lab+'</label><select id="'+c.id+'">'+
+         c.sel.map(s=>'<option value="'+s[0]+'">'+s[1]+'</option>').join('')+'</select></div>';
+    }else{
+      h+='<div class="fld"><label>'+c.lab+'</label>'+
+         '<input id="'+c.id+'" type="range" min="'+c.min+'" max="'+c.max+'" step="'+c.step+'" value="'+c.val+'"></div>';
+    }
+  });
+  $('ctl').innerHTML=h;
+  CTL[MODE].forEach(c=>{
+    PAR[c.id]=c.sel?c.val:c.val;
+    const ev=c.sel?'change':'input';
+    $(c.id)['on'+ev]=()=>{PAR[c.id]=c.sel?$(c.id).value:parseFloat($(c.id).value);render();};
+  });
+}
+function P(){return PAR;}
+
+/* ================= 1계: y' + a y = b e^{kt} ================= */
+function solve1(p){
+  const res = (p.k===-p.a);                    /* 공진: 입력지수 = -a */
+  let yform, C;
+  if(!res){
+    const A = p.b/(p.k+p.a);                   /* 특수해 계수 */
+    C = p.y0 - A;
+    yform = t => C*Math.exp(-p.a*t) + A*Math.exp(p.k*t);
+    return {res:false, A, C, y:yform,
+      yp:t=>A*Math.exp(p.k*t), yp1:t=>A*p.k*Math.exp(p.k*t),
+      text:'y(t) = '+fmt(C,3)+'·e^{−'+fmt(p.a,2)+'t} + '+fmt(A,3)+'·e^{'+fmt(p.k,2)+'t}'};
+  }
+  C = p.y0;
+  yform = t => (p.b*t + C)*Math.exp(-p.a*t);
+  return {res:true, A:0, C, y:yform,
+    yp:t=>p.b*t*Math.exp(-p.a*t), yp1:t=>p.b*Math.exp(-p.a*t)*(1-p.a*t),
+    text:'y(t) = ('+fmt(p.b,2)+'·t + '+fmt(C,3)+')·e^{−'+fmt(p.a,2)+'t}  (공진: k = −a)'};
+}
+
+/* ================= 2계: a y'' + b y' + c y = f ================= */
+function solve2(p){
+  const D = p.b*p.b - 4*p.a*p.c;
+  const R = {};
+  /* --- 특수해 (미정계수) --- */
+  let yp, yp1, yp2, resCos=false, yptxt='';
+  if(p.f==='const'){
+    if(p.c!==0){ const A=p.F/p.c; yp=t=>A; yp1=()=>0; yp2=()=>0; yptxt='y_p = F/c = '+fmt(A,3); }
+    else if(p.b!==0){ const A=p.F/p.b; yp=t=>A*t; yp1=t=>A; yp2=()=>0; yptxt='c=0 → y_p = (F/b)·t = '+fmt(A,3)+'·t'; }
+    else { const A=p.F/(2*p.a); yp=t=>A*t*t; yp1=t=>2*A*t; yp2=()=>2*A; yptxt='b=c=0 → y_p = F·t²/(2a)'; }
+  }else if(p.f==='cos'){
+    const w=p.w, den=(p.c-p.a*w*w)*(p.c-p.a*w*w)+(p.b*w)*(p.b*w);
+    if(den<1e-12){                        /* 공진: b=0, c=aω² */
+      resCos=true; const A=p.F/(2*p.a*w);
+      yp=t=>A*t*Math.sin(w*t); yp1=t=>A*(Math.sin(w*t)+w*t*Math.cos(w*t)); yp2=t=>A*(2*w*Math.cos(w*t)-w*w*t*Math.sin(w*t));
+      yptxt='공진! y_p = F·t·sin(ωt)/(2aω), 계수 '+fmt(A,3);
+    }else{
+      const M=p.F*(p.c-p.a*w*w)/den, N=p.F*p.b*w/den;
+      yp=t=>M*Math.cos(w*t)+N*Math.sin(w*t);
+      yp1=t=>-M*w*Math.sin(w*t)+N*w*Math.cos(w*t);
+      yp2=t=>-w*w*(M*Math.cos(w*t)+N*Math.sin(w*t));
+      yptxt='y_p = '+fmt(M,3)+'·cos(ωt) + '+fmt(N,3)+'·sin(ωt) (미정계수 M,N)';
+      R.M=M; R.N=N;
+    }
+  }else{ yp=()=>0; yp1=()=>0; yp2=()=>0; yptxt='동차: y_p = 0'; }
+
+  /* --- 동차해: 특성방정식 a r² + b r + c = 0 --- */
+  let C1,C2;
+  if(D>1e-12){
+    const r1=(-p.b+Math.sqrt(D))/(2*p.a), r2=(-p.b-Math.sqrt(D))/(2*p.a);
+    /* y = C1 e^{r1 t} + C2 e^{r2 t} + y_p ; IC */
+    const e0=p.y0-yp(0), e1=p.y1-yp1(0);
+    C2=(e1-r1*e0)/(r2-r1); C1=e0-C2;
+    const y=t=>C1*Math.exp(r1*t)+C2*Math.exp(r2*t)+yp(t);
+    R.case='over'; R.r1=r1; R.r2=r2;
+    R.text='y(t) = '+fmt(C1,3)+'·e^{'+fmt(r1,3)+'t} + '+fmt(C2,3)+'·e^{'+fmt(r2,3)+'t}'+(p.f==='0'?'':' + y_p');
+    return Object.assign(R,{y,yp,yp1,yp2,yptxt,resCos,C1,C2,D});
+  }
+  if(D>-1e-12){                            /* 중근 */
+    const r=-p.b/(2*p.a);
+    const e0=p.y0-yp(0), e1=p.y1-yp1(0);
+    C1=e0; C2=e1-r*C1;
+    const y=t=>(C1+C2*t)*Math.exp(r*t)+yp(t);
+    R.case='crit'; R.r1=r; R.r2=r;
+    R.text='y(t) = ('+fmt(C1,3)+' + '+fmt(C2,3)+'·t)·e^{'+fmt(r,3)+'t}'+(p.f==='0'?'':' + y_p');
+    return Object.assign(R,{y,yp,yp1,yp2,yptxt,resCos,C1,C2,D});
+  }
+  const al=-p.b/(2*p.a), be=Math.sqrt(-D)/(2*p.a);
+  const e0=p.y0-yp(0), e1=p.y1-yp1(0);
+  C1=e0; C2=(e1-al*C1)/be;
+  const y=t=>Math.exp(al*t)*(C1*Math.cos(be*t)+C2*Math.sin(be*t))+yp(t);
+  R.case='under'; R.al=al; R.be=be;
+  R.text='y(t) = e^{'+fmt(al,3)+'t}·('+fmt(C1,3)+'·cos '+fmt(be,3)+'t + '+fmt(C2,3)+'·sin '+fmt(be,3)+'t)'+(p.f==='0'?'':' + y_p');
+  return Object.assign(R,{y,yp,yp1,yp2,yptxt,resCos,C1,C2,D,al,be});
+}
+
+/* ================= RK4 (수치 검증 경로) ================= */
+function rk4(p,iv,T,N){
+  const f=(MODE===0)
+    ? (t,s)=>[ s[1], p.b*p.k*Math.exp(p.k*t)-p.a*s[1] ]   /* v' = d/dt(be^{kt}−ay) */
+    : (t,s)=>[ s[1], (forc(p,t)-p.b*s[1]-p.c*s[0])/p.a ];
+  let t=0, s=[iv, iv1(p)];
+  const h=T/N, out=[];
+  for(let i=0;i<=N;i++){
+    out.push([t,s[0]]);
+    const k1=f(t,s), k2=f(t+h/2,[s[0]+h/2*k1[0],s[1]+h/2*k1[1]]);
+    const k3=f(t+h/2,[s[0]+h/2*k2[0],s[1]+h/2*k2[1]]);
+    const k4=f(t+h,[s[0]+h*k3[0],s[1]+h*k3[1]]);
+    s=[s[0]+h/6*(k1[0]+2*k2[0]+2*k3[0]+k4[0]), s[1]+h/6*(k1[1]+2*k2[1]+2*k3[1]+k4[1])];
+    t+=h;
+  }
+  return out;
+}
+function iv1(p){ return MODE===0 ? (p.b-p.a*p.y0) : p.y1; }   /* 1계: y'(0)=b−a·y0 */
+function forc(p,t){ return p.f==='const'?p.F : (p.f==='cos'?p.F*Math.cos(p.w*t) : 0); }
+
+/* ================= 그림 ================= */
+function mk(tag,attrs){const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function draw(p,sol){
+  const s=$('gr'); s.innerHTML='';
+  const T=8, X0=70,X1=910,Y0=26,Y1=270;
+  const N=400; let ymax=0;
+  const ys=[]; for(let i=0;i<=N;i++){const t=T*i/N; ys.push(sol.y(t)); ymax=Math.max(ymax,Math.abs(sol.y(t)));}
+  ymax=Math.max(ymax*1.15, 0.5);
+  const py=v=>Y1-(v/ymax)*(Y1-Y0)*0.92, px=t=>X0+(t/T)*(X1-X0);
+  s.appendChild(mk('line',{x1:X0,y1:py(0),x2:X1,y2:py(0),stroke:'#2a323d'}));
+  s.appendChild(mk('line',{x1:X0,y1:Y0,x2:X0,y2:Y1,stroke:'#2a323d'}));
+  /* 닫힌형 */
+  let d=''; for(let i=0;i<=N;i++){const t=T*i/N; d+=(d?'L':'M')+px(t).toFixed(1)+' '+py(sol.y(t)).toFixed(1);}
+  s.appendChild(mk('path',{d,fill:'none',stroke:'#58a6ff','stroke-width':2.4}));
+  /* RK4 점 */
+  const r=rk4(p,p.y0,T,64);
+  r.forEach(([t,v],i)=>{ if(i%4===0)
+    s.appendChild(mk('circle',{cx:px(t),cy:py(v),r:3,fill:'#f0883e',opacity:0.9})); });
+  s.appendChild(mk('text',{x:X0+8,y:Y0+12,fill:'#58a6ff','font-size':12})).textContent='닫힌형 해';
+  s.appendChild(mk('text',{x:X0+80,y:Y0+12,fill:'#f0883e','font-size':12})).textContent='· RK4 수치해';
+  for(const t of [2,4,6,8]){
+    const e=mk('text',{x:px(t),y:Y1+16,fill:'#9aa7b4','font-size':11,'text-anchor':'middle'});e.textContent=t;s.appendChild(e);}
+  const e2=mk('text',{x:(X0+X1)/2,y:Y1+32,fill:'#9aa7b4','font-size':11,'text-anchor':'middle'});e2.textContent='t (초)';s.appendChild(e2);
+}
+
+/* ================= 풀이 과정 ================= */
+function steps1(p,r){
+  if(!r.res) return
+   '① 적분인자: <b>μ(t) = e^{∫a dt} = e^{'+fmt(p.a,2)+'t}</b><br>'+
+   '② 양변 곱: (e^{'+fmt(p.a,2)+'t}·y)\' = <b>'+fmt(p.b,2)+'·e^{'+fmt(p.a+p.k,2)+'t}</b><br>'+
+   '③ 우변 적분: e^{'+fmt(p.a,2)+'t}·y = '+fmt(p.b/(p.a+p.k),3)+'·e^{'+fmt(p.a+p.k,2)+'t} + C<br>'+
+   '④ 일반해: y = C·e^{−'+fmt(p.a,2)+'t} + '+fmt(r.A,3)+'·e^{'+fmt(p.k,2)+'t}<br>'+
+   '⑤ 초기조건 y(0)='+fmt(p.y0,2)+': <b>C = '+fmt(r.C,3)+'</b>';
+  return '① 적분인자: μ = e^{'+fmt(p.a,2)+'t} → (μy)\' = '+fmt(p.b,2)+'·e^{0·t} = '+fmt(p.b,2)+'<br>'+
+   '② 적분: e^{'+fmt(p.a,2)+'t}·y = '+fmt(p.b,2)+'·t + C  <b>(k=−a라 e^{0}만 남음 — 이게 공진)</b><br>'+
+   '③ y = ('+fmt(p.b,2)+'·t + C)·e^{−'+fmt(p.a,2)+'t},  y(0)='+fmt(p.y0,2)+' → <b>C='+fmt(r.C,3)+'</b><br>'+
+   '④ 특수해가 t를 물고 늘어나 승 — 강제항과 고유감쇠가 같은 속도일 때 나타나는 현상';
+}
+function steps2(p,r){
+  let h='① 특성방정식: <b>'+fmt(p.a,2)+'r² + '+fmt(p.b,2)+'r + '+fmt(p.c,2)+' = 0</b>, 판별식 D = b²−4ac = '+fmt(r.D,3)+'<br>';
+  if(r.case==='over') h+='② 실근 두 개 r₁='+fmt(r.r1,3)+', r₂='+fmt(r.r2,3)+' → 동차해 C₁e^{r₁t}+C₂e^{r₂t} (과감쇠)<br>';
+  if(r.case==='crit') h+='② 중근 r='+fmt(r.r1,3)+' → 동차해 (C₁+C₂t)e^{rt} (임계감쇠)<br>';
+  if(r.case==='under') h+='② 복소근 '+fmt(r.al,3)+'±'+fmt(r.be,3)+'i → 동차해 e^{αt}(C₁cos βt + C₂ sin βt) (저감쇠 진동)<br>';
+  h+='③ 비제차항 처리(미정계수): <b>'+r.yptxt+'</b><br>'+
+     '④ 초기조건 y(0)='+fmt(p.y0,2)+", y'(0)="+fmt(p.y1,2)+' → C₁='+fmt(r.C1,3)+', C₂='+fmt(r.C2,3)+'<br>'+
+     '⑤ 일반해 = 동차해 + 특수해. 아래 그림에서 파란 실선(이 식)과 주황 점(RK4)이 겹치는지 확인';
+  return h;
+}
+
+/* ================= 검산 ================= */
+function buildChecks(p,sol){
+  const rows=[]; let all=true;
+  const T=8, N=2000;
+  const r=rk4(p,MODE===0?p.y0:p.y0,T,N);
+  let emax=0;
+  for(let i=0;i<=N;i+=25){ emax=Math.max(emax,Math.abs(r[i][1]-sol.y(r[i][0]))); }
+  const ok1=emax<1e-5+1e-8*Math.abs(sol.y(T));   /* 증폭 해의 스케일 반영 */
+  rows.push(['RK4 수치해 vs 닫힌형 (h=T/2000)','최대 오차 '+emax.toExponential(2),ok1]); all&=ok1;
+
+  if(MODE===0){
+    let e2=0;
+    for(const t of [0.3,1.2,2.7,5.5]) e2=Math.max(e2,Math.abs(sol.y1c(t)+p.a*sol.y(t)-p.b*Math.exp(p.k*t)));
+    const ok2=e2<1e-9;
+    rows.push(['원식 대입 잔차 y\'+ay − b·e^{kt}','최대 '+e2.toExponential(2),ok2]); all&=ok2;
+    rows.push(['초기조건 y(0) 정확','y(0) = '+fmt(sol.y(0),6),Math.abs(sol.y(0)-p.y0)<1e-12]);
+    all&=(Math.abs(sol.y(0)-p.y0)<1e-12);
+  }else{
+    /* 특성근 잔차 + Vieta */
+    let er=0;
+    if(sol.case==='over'){
+      er=Math.max(Math.abs(p.a*sol.r1*sol.r1+p.b*sol.r1+p.c), Math.abs(p.a*sol.r2*sol.r2+p.b*sol.r2+p.c));
+      er=Math.max(er,Math.abs(sol.r1+sol.r2+p.b/p.a),Math.abs(sol.r1*sol.r2-p.c/p.a));
+    }else if(sol.case==='crit'){
+      er=Math.abs(p.a*sol.r1*sol.r1+p.b*sol.r1+p.c);
+    }else{
+      const re=p.a*(sol.al*sol.al-sol.be*sol.be)+p.b*sol.al+p.c;
+      const im=p.b*sol.be+2*p.a*sol.al*sol.be;
+      er=Math.max(Math.abs(re),Math.abs(im));
+    }
+    const ok2=er<1e-9;
+    rows.push(['특성근 대입 잔차 (＋Vieta)','최대 '+er.toExponential(2),ok2]); all&=ok2;
+    /* 특수해 잔차 */
+    let e3=0;
+    for(const t of [0.4,1.3,3.1,6.2]) e3=Math.max(e3,Math.abs(p.a*sol.yp2(t)+p.b*sol.yp1(t)+p.c*sol.yp(t)-forc(p,t)));
+    const ok3=e3<1e-9;
+    rows.push(['특수해 대입 잔차 a·y_p″+b·y_p′+c·y_p − f','최대 '+e3.toExponential(2),ok3]); all&=ok3;
+    const ok4=Math.abs(sol.y(0)-p.y0)<1e-9;
+    let dy0=(sol.case==='over')?sol.C1*sol.r1+sol.C2*sol.r2+sol.yp1(0)
+      :(sol.case==='crit')?sol.C1*sol.r1+sol.C2+sol.yp1(0)
+      :sol.al*sol.C1+sol.be*sol.C2+sol.yp1(0);
+    const ok4b=Math.abs(dy0-p.y1)<1e-9;
+    rows.push(['초기조건 y(0), y\'(0) 정확','y(0)·y\'(0) 잔차 '+(Math.abs(sol.y(0)-p.y0)+Math.abs(dy0-p.y1)).toExponential(2),ok4&&ok4b]); all&=(ok4&&ok4b);
+  }
+
+  let h=''; for(const [k,v,ok] of rows)
+    h+='<div class="chk"><span>'+k+'</span><span class="'+(ok?'ok':'bad')+'">'+v+(ok?' ✓ PASS':' ✗ FAIL')+'</span></div>';
+  h+='<div class="chk"><span><b>RESULT</b></span><span class="'+(all?'ok':'bad')+'">'+(all?'ALL PASS':'FAIL')+'</span></div>';
+  $('checks').innerHTML=h;
+}
+
+/* ================= 렌더 ================= */
+function setMode(m){
+  MODE=m;
+  $('tab0').classList.toggle('on',m===0);
+  $('tab1').classList.toggle('on',m===1);
+  buildCtl(); render();
+}
+function render(){
+  const p=P();
+  let sol, deq, head='', steps;
+  if(MODE===0){
+    sol=solve1(p);
+    deq="y' + "+fmt(p.a,2)+"·y = "+fmt(p.b,2)+"·e^{"+fmt(p.k,2)+"t}";
+    head=sol.res?'<span class="pill res">공진 (k = −a) — t·e^{−at} 특수해</span>'
+                :'<span class="pill under">비공진 — 적분인자로 한 번에</span>';
+    steps=steps1(p,sol);
+    $('vals').innerHTML=
+      '<div class="v hi"><div class="k">특수해 계수 b/(a+k)</div><div class="n">'+fmt(sol.A,3)+'</div><div class="u">· e^{kt}</div></div>'+
+      '<div class="v"><div class="k">동차해 계수 C</div><div class="n">'+fmt(sol.C,3)+'</div><div class="u">· e^{−at}</div></div>'+
+      '<div class="v"><div class="k">y(0)</div><div class="n">'+fmt(p.y0,2)+'</div><div class="u">초기조건</div></div>'+
+      '<div class="v"><div class="k">y(8) 값</div><div class="n">'+fmt(sol.y(8),3)+'</div><div class="u">곡선 끝</div></div>';
+    sol.y1c = sol.res
+      ? (t=>p.b*Math.exp(-p.a*t)-p.a*(p.b*t+sol.C)*Math.exp(-p.a*t))
+      : (t=>-p.a*sol.C*Math.exp(-p.a*t)+sol.A*p.k*Math.exp(p.k*t));
+  }else{
+    sol=solve2(p);
+    deq=fmt(p.a,2)+"·y'' + "+fmt(p.b,2)+"·y' + "+fmt(p.c,2)+"·y = "+
+        (p.f==='0'?'0':(p.f==='const'?fmt(p.F,2):fmt(p.F,2)+'·cos('+fmt(p.w,2)+'t)'));
+    head=sol.resCos?'<span class="pill res">코사인 공진 — t·sin 항이 자라난다</span>':
+       (sol.case==='over'?'<span class="pill over">과감쇠 — 실근 두 개</span>':
+        sol.case==='crit'?'<span class="pill crit">임계감쇠 — 중근</span>':
+        '<span class="pill under">저감쇠 진동 — 복소근</span>');
+    steps=steps2(p,sol);
+    $('vals').innerHTML=
+      (sol.case==='under'?
+        '<div class="v hi"><div class="k">특성근</div><div class="n" style="font-size:13px">'+fmt(sol.al,2)+'±'+fmt(sol.be,2)+'i</div><div class="u">α±βi</div></div>'
+       :'<div class="v hi"><div class="k">특성근 r₁·r₂</div><div class="n" style="font-size:13px">'+fmt(sol.r1,2)+' , '+fmt(sol.r2,2)+'</div><div class="u">D='+fmt(sol.D,2)+'</div></div>')+
+      '<div class="v"><div class="k">C₁</div><div class="n">'+fmt(sol.C1,3)+'</div><div class="u">동차해 계수</div></div>'+
+      '<div class="v"><div class="k">C₂</div><div class="n">'+fmt(sol.C2,3)+'</div><div class="u">동차해 계수</div></div>'+
+      '<div class="v"><div class="k">y(8) 값</div><div class="n">'+fmt(sol.y(8),3)+'</div><div class="u">곡선 끝</div></div>';
+  }
+  $('status').innerHTML=head;
+  $('deq').textContent=deq;
+  draw(p,sol);
+  $('steps').innerHTML='<div class="formula" style="margin:4px 0">'+sol.text+'</div>'+steps;
+  buildChecks(p,sol);
+}
+setMode(0);
+</script>
+</body>
+</html>
