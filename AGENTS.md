@@ -16,6 +16,12 @@
 | `three-phase.html` | 회로이론 | Y-Y·Y-Δ·Δ-Y·Δ-Δ, 평형/불평형, 4선식/3선식, 페이저도, 풀이 과정 |
 | `circuit-editor.html` | 회로이론 | R·L·C 회로를 직접 그리고 테브난/노턴(교류 복소) 구하기 |
 | `thevenin.html` | 회로이론 | 값 편집형 테브난/노턴 단계 확인 |
+| `ohms-law.html` | 회로이론 | 옴의 법칙 V=IR, 직렬·병렬·분압·전력, 예제 4종 단계별 풀이 |
+| `maxwell.html` | 전자기학·전자장 | 맥스웰 방정식 4종(적분·미분형)과 각 식의 수치 예시 |
+| `convolution.html` | 신호받시스템 | 컨볼루션 뒤집기·이동·곱하기·적분, 해석해 대조 |
+| `eigen.html` | 선형대수 | 2×2 고유값·고유벡터, 단위원→타원, 복소 고유값 |
+| `gauss.html` | 전자장 | 가우스 법칙 — 점·선·평면·구 대칭, 풀이 과정 |
+| `pipeline.html` | 컴퓨터구조 | 5단 파이프라인 RAW 해저드, 스톨·포워딩, CPI |
 | `index.html` | — | 도구 목록 페이지 (새 도구를 추가하면 여기에 카드를 넣는다) |
 
 ## 절대 규칙
@@ -36,6 +42,12 @@ python verify_tyu91.py         # 교재 Schottky 예제 6개 값 + 불변식 5�
 python verify_3phase.py        # 3상 4가지 결선 기준값
 python verify_thevenin.py      # R_th를 세 경로(테스트전원/I_sc/단계축소)로 대조
 python verify_ac_thevenin.py   # R·L·C 교류 테브난, 복소 정합
+python verify_convolution.py   # 컨볼루션: 해석해 대조·교환법칙·δ 항등식·격자 수렴
+python verify_eigen.py         # 특성다항식 잔차·‖Av−λv‖·Vieta·거듭제곱법·회전각
+python verify_gauss.py         # 플럭스 직접 적분=Q/ε₀·껍질 상쇄·MC Q_enc·선·평면 대조
+python verify_pipeline.py      # 손계산 8케이스 스케줄·구조 항등식·해저드 원장부
+python verify_ohms_law.py      # MNA 노달 해석 vs 닫힌형·전력 삼경로·예제 4종 답
+python verify_maxwell.py       # 맥스웰 4종 수치 대조·쌍극자 ∮B·dA=0·I_d=I_cond·빛의 속도
 ```
 
 모두 표준 라이브러리만 사용하고, **종료 코드 0 = 통과**입니다.

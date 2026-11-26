@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>옴의 법칙 — 직렬·병렬·분압·전력</title>
+<style>
+  :root{ --bg:#0f1216; --panel:#161b22; --line:#2a323d; --txt:#e6edf3; --dim:#9aa7b4;
+         --acc:#58a6ff; --warn:#f0883e; --ok:#3fb950; --red:#f85149; --pur:#bc8cff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+       padding:16px 14px 40px;-webkit-text-size-adjust:100%}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .grid{display:grid;gap:9px}
+  .fld{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
+  .fld label{display:block;font-size:11px;color:var(--dim);margin-bottom:2px}
+  .fld input,.fld select{width:100%;background:transparent;border:0;color:var(--txt);font:inherit;font-size:14px;outline:none;padding:0}
+  .vals{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:9px}
+  .v{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+  .v .k{font-size:11px;color:var(--dim)} .v .n{font-size:16px;font-variant-numeric:tabular-nums}
+  .v .u{font-size:11px;color:var(--dim)}
+  .v.hi{border-color:var(--acc)}
+  .chk{font-size:12.5px;display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .chk:last-child{border-bottom:0}
+  .ok{color:var(--ok)} .bad{color:var(--warn)}
+  .note{font-size:12.5px;color:var(--dim);margin-top:8px}
+  .note b{color:var(--txt)}
+  svg{width:100%;height:auto;display:block;background:var(--bg);border-radius:8px}
+  .ex{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+  .ex .q{font-size:14px;margin-bottom:6px}
+  .ex .s{font-size:13px;color:var(--dim);line-height:1.75}
+  .ex .s b{color:var(--txt)}
+  .ex button{background:transparent;border:1px solid var(--acc);color:var(--acc);border-radius:999px;
+             font:inherit;font-size:12px;padding:3px 12px;margin-top:7px;cursor:pointer}
+  .ex button:hover{background:var(--acc);color:#0f1216}
+  .tri{display:flex;gap:14px;align-items:center;margin-bottom:4px}
+  .tri svg{width:150px;flex:none}
+</style>
+</head>
+<body>
+
+<h1>옴의 법칙 V = IR — 직렬·병렬·분압·전력</h1>
+<div class="sub">회로이론 · 전압·전류·저항의 관계와 그로 파생되는 개념들 · 예제는 단계별 풀이 포함</div>
+
+<div class="card">
+  <div class="tri">
+    <svg viewBox="0 0 150 120">
+      <polygon points="75,8 12,112 138,112" fill="rgba(88,166,255,.10)" stroke="#58a6ff" stroke-width="1.6"/>
+      <text x="75" y="42" fill="#58a6ff" font-size="17" font-weight="700" text-anchor="middle">V</text>
+      <text x="48" y="100" fill="#e6edf3" font-size="15" font-weight="700" text-anchor="middle">I</text>
+      <text x="102" y="100" fill="#e6edf3" font-size="15" font-weight="700" text-anchor="middle">R</text>
+      <line x1="30" y1="76" x2="120" y2="76" stroke="#2a323d"/>
+    </svg>
+    <div class="note" style="margin:0">
+      손가락으로 하나를 가리면 나머지 둘의 식: <b>V = I×R · I = V/R · R = V/I</b><br>
+      전력은 항상 <b>P = VI = I²R = V²/R</b> — 저항이 클수록 같은 전류엔 더 많은 열.
+    </div>
+  </div>
+  <div class="grid" style="grid-template-columns:1.3fr 1fr 1fr 1fr;margin-top:9px">
+    <div class="fld"><label>회로 형태</label>
+      <select id="topo">
+        <option value="single">단일 저항</option>
+        <option value="series">직렬 (R1 + R2)</option>
+        <option value="parallel">병렬 (R1 ∥ R2)</option>
+        <option value="divider">분압 (R2 양단 = V_out)</option>
+      </select></div>
+    <div class="fld"><label>전원 V (V)</label><input id="vs" type="range" min="1" max="24" step="0.5" value="12"></div>
+    <div class="fld"><label>R1 (Ω)</label><input id="r1" type="range" min="1" max="100" step="1" value="4"></div>
+    <div class="fld"><label>R2 (Ω)</label><input id="r2" type="range" min="1" max="100" step="1" value="6"></div>
+  </div>
+</div>
+
+<div class="card"><div class="vals" id="vals"></div></div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">회로 — 수치는 계산값을 그대로 표시</div>
+  <svg id="cir" viewBox="0 0 940 300"></svg>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:10px">예제 4종 — 단계별 풀이 · [이 값 적용]으로 직접 확인</div>
+  <div id="exs"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">검산</div>
+  <div id="checks"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const fmt=(v,d)=>{d=(d===undefined)?2:d;
+  if(Math.abs(v)>=1e5||Math.abs(v)<1e-2){const e=Math.floor(Math.log10(Math.abs(v)||1));
+    return (v/Math.pow(10,e)).toFixed(2)+'e'+e;}
+  return v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});};
+
+function P(){return {topo:$('topo').value,
+  vs:parseFloat($('vs').value)||1, r1:parseFloat($('r1').value)||1, r2:parseFloat($('r2').value)||1};}
+
+/* 회로 계산 — verify_ohms_law.py의 MNA 솔버와 독립 대조되는 닫힌형 */
+function solve(p){
+  if(p.topo==='single'){
+    const I=p.vs/p.r1;
+    return {req:p.r1, I:I, I1:I, I2:0, v1:p.vs, v2:0, p1:p.vs*I, p2:0, vout:p.vs};
+  }
+  if(p.topo==='series'){
+    const req=p.r1+p.r2, I=p.vs/req;
+    return {req:req, I:I, I1:I, I2:I, v1:I*p.r1, v2:I*p.r2,
+            p1:I*I*p.r1, p2:I*I*p.r2, vout:p.vs};
+  }
+  if(p.topo==='parallel'){
+    const I1=p.vs/p.r1, I2=p.vs/p.r2, I=I1+I2;
+    return {req:p.vs/I, I:I, I1:I1, I2:I2, v1:p.vs, v2:p.vs,
+            p1:p.vs*I1, p2:p.vs*I2, vout:p.vs};
+  }
+  const req=p.r1+p.r2, I=p.vs/req;
+  return {req:req, I:I, I1:I, I2:I, v1:I*p.r1, v2:I*p.r2,
+          p1:I*I*p.r1, p2:I*I*p.r2, vout:I*p.r2};
+}
+
+/* ---------- SVG ---------- */
+function mk(tag,attrs){const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function txt(s,x,y,t,color,size,anchor){
+  const e=mk('text',{x,y,fill:color||'#9aa7b4','font-size':size||12,'text-anchor':anchor||'start'});e.textContent=t;s.appendChild(e);return e;}
+function wire(s,pts){ let d=''; pts.forEach((p,i)=>d+=(i?'L':'M')+p[0]+' '+p[1]);
+  s.appendChild(mk('path',{d,fill:'none',stroke:'#8b949e','stroke-width':1.8}));}
+function res(s,x,y,lab,val,col){
+  s.appendChild(mk('rect',{x:x-32,y:y-11,width:64,height:22,rx:4,fill:'rgba(88,166,255,.12)',stroke:col||'#58a6ff','stroke-width':1.6}));
+  txt(s,x-14,y-18,lab,'#58a6ff',12);
+  txt(s,x-24,y+4,(val!==undefined?fmt(val,1)+' Ω':''),col||'#e6edf3',12);
+}
+function battery(s,x,y){
+  wire(s,[[x-6,y-40],[x-6,y-12]]); wire(s,[[x+6,y-40],[x+6,y-12]]);
+  s.appendChild(mk('line',{x1:x-18,y1:y-12,x2:x+18,y2:y-12,stroke:'#e6edf3','stroke-width':2.4}));
+  s.appendChild(mk('line',{x1:x-9,y1:y-4,x2:x+9,y2:y-4,stroke:'#e6edf3','stroke-width':3.4}));
+  wire(s,[[x,y-4],[x,y+14]]);
+  txt(s,x+24,y-16,'+','#e6edf3',13); txt(s,x+24,y-2,'−','#9aa7b4',13);
+}
+function iArrow(s,x1,y1,x2,y2,lab,col){
+  s.appendChild(mk('line',{x1,y1,x2,y2,stroke:col||'#3fb950','stroke-width':2}));
+  const a=Math.atan2(y2-y1,x2-x1),L=9;
+  s.appendChild(mk('polygon',{points:x2+','+y2+' '+(x2-L*Math.cos(a-0.42))+','+(y2-L*Math.sin(a-0.42))+
+    ' '+(x2-L*Math.cos(a+0.42))+','+(y2-L*Math.sin(a+0.42)),fill:col||'#3fb950'}));
+  txt(s,(x1+x2)/2-12,(y1+y2)/2-8,lab,col||'#3fb950',12.5);
+}
+
+function draw(p,r){
+  const s=$('cir'); s.innerHTML='';
+  const B=260;                                  /* 하단 레일 y */
+  if(p.topo==='single'||p.topo==='series'){
+    wire(s,[[80,90],[900,90]]); wire(s,[[80,B],[900,B]]);
+    wire(s,[[80,90],[80,B]]);
+    battery(s,80,170);
+    wire(s,[[900,90],[900,B]]);
+    iArrow(s,150,90,270,90,'I = '+fmt(r.I,3)+' A');
+    if(p.topo==='single'){
+      res(s,490,90,'R1',p.r1);
+      txt(s,440,140,'V₁ = I·R1 = '+fmt(r.v1,2)+' V','#58a6ff',13);
+      txt(s,440,162,'P₁ = '+fmt(r.p1,1)+' W','#f0883e',13);
+    }else{
+      res(s,380,90,'R1',p.r1); res(s,620,90,'R2',p.r2);
+      txt(s,330,140,'V₁ = '+fmt(r.v1,2)+' V','#58a6ff',13);
+      txt(s,570,140,'V₂ = '+fmt(r.v2,2)+' V','#58a6ff',13);
+      txt(s,430,162,'V₁+V₂ = '+fmt(r.v1+r.v2,2)+' V (KVL)','#3fb950',13);
+      txt(s,430,184,'P₁+P₂ = '+fmt(r.p1+r.p2,1)+' W','#f0883e',13);
+    }
+  }else if(p.topo==='parallel'){
+    wire(s,[[80,170],[380,170]]); wire(s,[[80,170],[80,90]]); wire(s,[[80,90],[80,250]]);
+    battery(s,80,170);
+    /* 두 분지 */
+    wire(s,[[380,90],[700,90]]); wire(s,[[380,250],[700,250]]);
+    wire(s,[[380,170],[380,90]]); wire(s,[[380,170],[380,250]]);
+    wire(s,[[700,90],[700,170]]); wire(s,[[700,250],[700,170]]);
+    res(s,540,90,'R1',p.r1); res(s,540,250,'R2',p.r2);
+    iArrow(s,410,90,470,90,'I₁ = '+fmt(r.I1,3)+' A');
+    iArrow(s,470,250,530,250,'I₂ = '+fmt(r.I2,3)+' A');
+    iArrow(s,150,170,300,170,'I = I₁+I₂ = '+fmt(r.I,3)+' A');
+    s.appendChild(mk('circle',{cx:380,cy:170,r:4,fill:'#e6edf3'}));
+    s.appendChild(mk('circle',{cx:700,cy:170,r:4,fill:'#e6edf3'}));
+    txt(s,380,205,'노트: 병렬 저항 양단 전압 = 전원 전압 그대로','#9aa7b4',12.5,'middle');
+    txt(s,380,224,'R_eq = V/I = '+fmt(r.req,2)+' Ω','#3fb950',12.5,'middle');
+  }else{
+    /* 분압: V - R1 - [탭] - R2 - GND */
+    wire(s,[[80,90],[900,90]]); wire(s,[[80,B],[900,B]]);
+    wire(s,[[80,90],[80,B]]);
+    battery(s,80,170); wire(s,[[900,90],[900,B]]);
+    res(s,330,90,'R1',p.r1); res(s,590,90,'R2',p.r2);
+    iArrow(s,150,90,240,90,'I = '+fmt(r.I,3)+' A');
+    /* 출력 탭: R2 우측 노드에서 아래로 */
+    wire(s,[[660,90],[660,150]]); wire(s,[[660,150],[760,150]]);
+    wire(s,[[760,150],[760,B]]);
+    s.appendChild(mk('circle',{cx:660,cy:90,r:4,fill:'#e6edf3'}));
+    s.appendChild(mk('circle',{cx:760,cy:B,r:4,fill:'#e6edf3'}));
+    txt(s,670,145,'V_out','#bc8cff',12.5);
+    txt(s,790,140,'V_out = V·R2/(R1+R2)','#bc8cff',13);
+    txt(s,790,160,'= '+fmt(r.vout,2)+' V','#bc8cff',13);
+    /* GND 심볼 */
+    wire(s,[[760-10,B+12],[760+10,B+12]]); wire(s,[[760-5,B+18],[760+5,B+18]]);
+    wire(s,[[760,B],[760,B+12]]);
+    txt(s,330,140,'V₁ = '+fmt(r.v1,2)+' V','#58a6ff',13);
+    txt(s,560,140,'V₂ = '+fmt(r.v2,2)+' V','#58a6ff',13);
+  }
+  txt(s,470,B+34,'R_eq = '+fmt(r.req,2)+' Ω · P_total = '+fmt(r.p1+r.p2,1)+' W','#f0883e',13,'middle');
+}
+
+/* ---------- 예제 ---------- */
+const EX=[
+ {topo:'single', vs:12, r1:4, r2:6,
+  q:'예제 1 — 기본: 12 V 배터리에 4 Ω 저항 하나. 전류와 소비 전력은?',
+  s:'① 옴의 법칙: <b>I = V/R = 12/4 = 3 A</b><br>② 전력: <b>P = V·I = 12×3 = 36 W</b> (또는 I²R = 9×4 = 36 W, V²/R = 144/4 = 36 W — 세 경로 모두 같다)'},
+ {topo:'divider', vs:9, r1:2, r2:1,
+  q:'예제 2 — 분압: 9 V에 R1 = 2 Ω, R2 = 1 Ω 직렬. R2 양단 전압(V_out)은?',
+  s:'① 전류: <b>I = V/(R1+R2) = 9/3 = 3 A</b><br>② 옴의 법칙(다시): <b>V_out = I·R2 = 3×1 = 3 V</b><br>③ 확인: V·R2/(R1+R2) = 9×1/3 = 3 V — 분압 공식과 같다'},
+ {topo:'parallel', vs:12, r1:6, r2:3,
+  q:'예제 3 — 병렬 전류 분배: 12 V에 6 Ω ∥ 3 Ω. 각 가지 전류와 합계?',
+  s:'① 각 가지에 옴의 법칙: <b>I₁ = 12/6 = 2 A, I₂ = 12/3 = 4 A</b><br>② KCL: <b>I = 2+4 = 6 A</b><br>③ 등가 저항: <b>R_eq = 1/(1/6+1/3) = 1/(1/2) = 2 Ω</b> — V/I = 12/6 = 2 Ω와 같다'},
+ {topo:'single', vs:10, r1:100, r2:6,
+  q:'예제 4 — 전류 고정: 100 Ω 저항에 0.1 A를 흘려보낸다. 필요한 전압과 발열?',
+  s:'① 옴의 법칙 뒤집기: <b>V = I·R = 0.1×100 = 10 V</b><br>② 발열: <b>P = I²R = 0.01×100 = 1 W</b> → 1 W 이상 견디는 저항을 써야 한다'},
+];
+function buildExs(){
+  let h='';
+  EX.forEach((e,i)=>{
+    h+='<div class="ex"><div class="q">'+e.q+'</div><div class="s">'+e.s+'</div>'+
+        '<button onclick="applyEx('+i+')">이 값 적용</button></div>';
+  });
+  $('exs').innerHTML=h;
+}
+function applyEx(i){const e=EX[i];
+  $('topo').value=e.topo; $('vs').value=e.vs; $('r1').value=e.r1; $('r2').value=e.r2;
+  render();
+  $('exs').children[i].scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+function render(){
+  const p=P(), r=solve(p);
+  const rows=
+    (p.topo==='single') ?
+      '<div class="v hi"><div class="k">전류 I = V/R</div><div class="n">'+fmt(r.I,3)+'</div><div class="u">A</div></div>'+
+      '<div class="v"><div class="k">전압강하 V₁</div><div class="n">'+fmt(r.v1,2)+'</div><div class="u">V</div></div>'
+    : (p.topo==='parallel') ?
+      '<div class="v hi"><div class="k">I₁ (R1 가지)</div><div class="n">'+fmt(r.I1,3)+'</div><div class="u">A</div></div>'+
+      '<div class="v hi"><div class="k">I₂ (R2 가지)</div><div class="n">'+fmt(r.I2,3)+'</div><div class="u">A</div></div>'+
+      '<div class="v"><div class="k">합계 I (KCL)</div><div class="n">'+fmt(r.I,3)+'</div><div class="u">A</div></div>'
+    :
+      '<div class="v hi"><div class="k">전류 I</div><div class="n">'+fmt(r.I,3)+'</div><div class="u">A</div></div>'+
+      '<div class="v"><div class="k">V₁ (R1)</div><div class="n">'+fmt(r.v1,2)+'</div><div class="u">V</div></div>'+
+      '<div class="v"><div class="k">V₂ (R2)</div><div class="n">'+fmt(r.v2,2)+'</div><div class="u">V</div></div>';
+  $('vals').innerHTML=rows+
+    '<div class="v"><div class="k">등가 저항 R_eq</div><div class="n">'+fmt(r.req,2)+'</div><div class="u">Ω</div></div>'+
+    '<div class="v"><div class="k">전력 P_total</div><div class="n">'+fmt(r.p1+r.p2,1)+'</div><div class="u">W</div></div>'+
+    ((p.topo==='divider')?'<div class="v hi"><div class="k">V_out</div><div class="n">'+fmt(r.vout,2)+'</div><div class="u">V</div></div>':'');
+
+  draw(p,r);
+  buildChecks(p,r);
+}
+
+/* ---------- 검산 ---------- */
+function buildChecks(p,r){
+  const rows=[]; let all=true;
+  /* 1. R_eq: 두 경로 (닫힌형 vs V/I·전체전력 일관) */
+  let req2;
+  if(p.topo==='single') req2=p.r1;
+  else if(p.topo==='series') req2=p.r1+p.r2;
+  else if(p.topo==='parallel') req2=1/(1/p.r1+1/p.r2);
+  else req2=p.r1+p.r2;
+  const ok1=Math.abs(req2-r.req)/r.req<1e-12;
+  rows.push(['R_eq 두 경로 (닫힌형 vs 저항 축소)',fmt(req2,3)+' = '+fmt(r.req,3),ok1]); all&=ok1;
+
+  /* 2. KVL: 직렬·분압은 강하 합 = 전원, 병렬·단일은 양단 = 전원 */
+  let kvl;
+  if(p.topo==='series'||p.topo==='divider') kvl=Math.abs(r.v1+r.v2-p.vs);
+  else kvl=Math.abs(r.v1-p.vs);
+  const ok2=kvl<1e-9;
+  rows.push(['KVL ΣV강하 = V전원','잔차 '+kvl.toExponential(1),ok2]); all&=ok2;
+
+  /* 3. KCL: 병렬에서 가지 전류 합 */
+  if(p.topo==='parallel'){
+    const kcl=Math.abs(r.I1+r.I2-r.I);
+    const ok3=kcl<1e-9;
+    rows.push(['KCL ΣI가지 = I합계','잔차 '+kcl.toExponential(1),ok3]); all&=ok3;
+  }else{
+    rows.push(['KCL — 가지 없음(직렬) I 동일',fmt(r.I1,3)+' A 고정',null]);
+  }
+
+  /* 4. 전력 평형: 각 소자 P 합 = 전원 공급 */
+  const ps=p.vs*r.I;
+  const ok4=Math.abs(r.p1+r.p2-ps)/ps<1e-12;
+  rows.push(['전력 평형 ΣP소자 = P전원',fmt(r.p1+r.p2,2)+' W = '+fmt(ps,2)+' W',ok4]); all&=ok4;
+
+  /* 5. 전력 삼각형: P=VI=I²R=V²/R (R1 기준) */
+  const pa=r.p1, pb=r.I1*r.I1*p.r1, pc=r.v1*r.v1/p.r1;
+  const ok5=Math.max(Math.abs(pa-pb),Math.abs(pa-pc))/pa<1e-12;
+  rows.push(['P = VI = I²R = V²/R (R1)','세 경로 일치',ok5]); all&=ok5;
+
+  /* 6. 예제 값 대조: 현재 회로가 예제와 일치하면 그 답 확인 */
+  const exHit=EX.findIndex(e=>e.topo===p.topo&&e.vs===p.vs&&e.r1===p.r1&&e.r2===p.r2);
+  if(exHit>=0){
+    const want=[3,36][0];
+    let ok6=true, desc='';
+    if(exHit===0){ ok6=(Math.abs(r.I-3)<1e-9&&Math.abs(r.p1-36)<1e-9); desc='I=3 A, P=36 W'; }
+    if(exHit===1){ ok6=(Math.abs(r.vout-3)<1e-9); desc='V_out=3 V'; }
+    if(exHit===2){ ok6=(Math.abs(r.I1-2)<1e-9&&Math.abs(r.I2-4)<1e-9&&Math.abs(r.I-6)<1e-9); desc='I₁=2, I₂=4, I=6 A'; }
+    if(exHit===3){ ok6=(Math.abs(r.I-0.1)<1e-9&&Math.abs(r.p1-1)<1e-9); desc='I=0.1 A, P=1 W'; }
+    rows.push(['예제 '+(exHit+1)+' 답 대조',desc,ok6]); all&=ok6;
+  }
+
+  let h=''; for(const [k,v,ok] of rows)
+    h+='<div class="chk"><span>'+k+'</span><span class="'+(ok===null?'':ok?'ok':'bad')+'">'+v+
+       (ok===null?'':ok?' ✓ PASS':' ✗ FAIL')+'</span></div>';
+  h+='<div class="chk"><span><b>RESULT</b></span><span class="'+(all?'ok':'bad')+'">'+(all?'ALL PASS':'FAIL')+'</span></div>';
+  $('checks').innerHTML=h;
+}
+
+['topo','vs','r1','r2'].forEach(id=>$(id).oninput=render);
+buildExs();
+render();
+</script>
+</body>
+</html>

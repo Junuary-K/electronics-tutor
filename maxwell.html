@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>맥스웰 방정식 — 네 식으로 보는 전자기학</title>
+<style>
+  :root{ --bg:#0f1216; --panel:#161b22; --line:#2a323d; --txt:#e6edf3; --dim:#9aa7b4;
+         --acc:#58a6ff; --warn:#f0883e; --ok:#3fb950; --red:#f85149; --pur:#bc8cff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+       padding:16px 14px 40px;-webkit-text-size-adjust:100%}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .grid{display:grid;gap:9px}
+  .fld{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
+  .fld label{display:block;font-size:11px;color:var(--dim);margin-bottom:2px}
+  .fld input,.fld select{width:100%;background:transparent;border:0;color:var(--txt);font:inherit;font-size:14px;outline:none;padding:0}
+  .eqs{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:9px;margin-bottom:10px}
+  .eq{border:1px solid var(--line);border-radius:10px;padding:8px 11px;font-size:12.5px;color:var(--dim);cursor:pointer}
+  .eq b{color:var(--txt);display:block;font-size:13px;margin-bottom:2px}
+  .eq.on{border-color:var(--acc);color:var(--txt)}
+  .big{font-size:17px;font-weight:700;margin:6px 0 2px;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .form{font-size:14.5px;color:var(--txt);font-family:ui-monospace,Menlo,Consolas,monospace;margin:7px 0}
+  .form span{color:var(--dim)}
+  .vals{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:9px}
+  .v{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+  .v .k{font-size:11px;color:var(--dim)} .v .n{font-size:16px;font-variant-numeric:tabular-nums}
+  .v .u{font-size:11px;color:var(--dim)}
+  .v.hi{border-color:var(--acc)}
+  .chk{font-size:12.5px;display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .chk:last-child{border-bottom:0}
+  .ok{color:var(--ok)} .bad{color:var(--warn)}
+  .note{font-size:12.5px;color:var(--dim);margin-top:8px}
+  .note b{color:var(--txt)}
+  svg{width:100%;height:auto;display:block;background:var(--bg);border-radius:8px}
+</style>
+</head>
+<body>
+
+<h1>맥스웰 방정식 4종 — 적분형 · 미분형 · 수치 예시</h1>
+<div class="sub">전자기학·전자장 · 각 식을 하나씩 눌러 대칭 사례로 수치를 직접 확인</div>
+
+<div class="card">
+  <div class="eqs">
+    <div class="eq on" id="tab0" onclick="setEq(0)"><b>I. 가우스 법칙 (전기)</b>전하가 전기장의 근원</div>
+    <div class="eq" id="tab1" onclick="setEq(1)"><b>II. 가우스 법칙 (자기)</b>자기 단극자는 없다</div>
+    <div class="eq" id="tab2" onclick="setEq(2)"><b>III. 패러데이 법칙</b>변하는 자기장이 전기장을 만든다</div>
+    <div class="eq" id="tab3" onclick="setEq(3)"><b>IV. 앙페르–맥스웰</b>전류와 변하는 전기장이 자기장을</div>
+  </div>
+  <div class="big" id="eqName"></div>
+  <div class="form" id="eqInt"></div>
+  <div class="form" id="eqDiff"></div>
+  <div class="note" id="eqNote" style="margin:6px 0 0"></div>
+</div>
+
+<div class="card">
+  <div class="grid" id="ctl" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
+</div>
+
+<div class="card"><div class="vals" id="vals"></div></div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px" id="figTitle"></div>
+  <svg id="fig" viewBox="0 0 940 330"></svg>
+  <div class="note" id="narr"></div>
+</div>
+
+<div class="card">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px">검산</div>
+  <div id="checks"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const fmt=(v,d)=>{d=(d===undefined)?2:d;
+  if(d===0) return Math.round(v).toLocaleString('en-US');
+  if(Math.abs(v)>=1e5||Math.abs(v)<1e-2){const e=Math.floor(Math.log10(Math.abs(v)||1));
+    return (v/Math.pow(10,e)).toFixed(2)+'e'+e;}
+  return v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});};
+const EPS0=8.8541878128e-12, MU0=4*Math.PI*1e-7, K=1/(4*Math.PI*EPS0);
+
+const EQ=[
+ {name:'I. 가우스 법칙 (전기)',
+  int:'∮ <b>E</b>·d<b>A</b> = Q_enc / ε₀',
+  dif:'∇·<b>E</b> = ρ / ε₀',
+  note:'닫힌 면을 통과하는 전기 플럭스는 <b>안에 들어 있는 전하량만</b> 본다 — 면의 모양·크기와 무관. 위 가우스 도구의 일반형이다.'},
+ {name:'II. 가우스 법칙 (자기)',
+  int:'∮ <b>B</b>·d<b>A</b> = 0',
+  dif:'∇·<b>B</b> = 0',
+  note:'자기장은 <b>단극자 없이 항상 흐름이 닫힌다</b>. 막대 자석을 아무리 잘라도 N극·S극이 쌍으로 나온다 — 들어간 자기 플럭스만큼 반드시 나간다.'},
+ {name:'III. 패러데이 법칙 (전자기 유도)',
+  int:'∮ <b>E</b>·d<b>l</b> = −dΦ_B/dt',
+  dif:'∇×<b>E</b> = −∂<b>B</b>/∂t',
+  note:'자기 플럭스가 변하면 루프를 도는 <b>유도 기전력</b>이 생긴다. 마이너스 부호가 <b>렌츠 법칙</b> — 유도장은 변화를 방해하는 방향.'},
+ {name:'IV. 앙페르–맥스웰 법칙',
+  int:'∮ <b>B</b>·d<b>l</b> = μ₀ ( I_enc + ε₀ dΦ_E/dt )',
+  dif:'∇×<b>B</b> = μ₀<b>J</b> + μ₀ε₀ ∂<b>E</b>/∂t',
+  note:'전류뿐 아니라 <b>변하는 전기장(변위 전류)</b>도 자기장을 만든다 — 콘덴서 충전 중 판 사이에서 전류가 끊겨도 자기장이 이어지는 이유.'},
+];
+
+const CTL={
+ 0:[{id:'q', lab:'전하 Q (nC)', min:1, max:50, step:0.5, val:10},
+    {id:'r', lab:'가우스 구면 반지름 r (cm)', min:1, max:15, step:0.1, val:5}],
+ 1:[{id:'sep', lab:'N–S 간격 d (cm)', min:1, max:12, step:0.1, val:4},
+    {id:'rs', lab:'둘러싼 구면 반지름 (cm)', min:6, max:20, step:0.5, val:12}],
+ 2:[{id:'b0', lab:'B₀ 진폭 (mT)', min:1, max:50, step:0.5, val:20},
+    {id:'om', lab:'각주파수 ω (rad/s)', min:1, max:20, step:0.5, val:6},
+    {id:'aa', lab:'루프 면적 A (cm²)', min:5, max:100, step:5, val:25},
+    {id:'tt', lab:'시각 t (s)', min:0, max:2, step:0.01, val:0.2}],
+ 3:[{id:'ca', lab:'판 면적 A (cm²)', min:10, max:200, step:10, val:50},
+    {id:'dd', lab:'판 간격 d (mm)', min:0.5, max:10, step:0.5, val:1},
+    {id:'kk', lab:'dV/dt (V/s)', min:1, max:100, step:1, val:50}],
+};
+let MODE=0, PAR={};
+
+function buildCtl(){
+  let h='';
+  CTL[MODE].forEach(c=>{
+    h+='<div class="fld"><label>'+c.lab+'</label>'+
+        '<input id="'+c.id+'" type="range" min="'+c.min+'" max="'+c.max+'" step="'+c.step+'" value="'+c.val+'"></div>';
+  });
+  $('ctl').innerHTML=h;
+  CTL[MODE].forEach(c=>{
+    PAR[c.id]=c.val;
+    $(c.id).oninput=()=>{PAR[c.id]=parseFloat($(c.id).value);render();};
+  });
+}
+
+function P(){const g=id=>PAR[id];return {q:g('q')*1e-9, r:g('r')*1e-2, sep:g('sep')*1e-2, rs:g('rs')*1e-2,
+  b0:g('b0')*1e-3, om:g('om'), aa:g('aa')*1e-4, tt:g('tt'), ca:g('ca')*1e-4, dd:g('dd')*1e-3, kk:g('kk')};}
+
+/* ---------- 수치 (verify_maxwell.py와 같은 식) ---------- */
+function fluxE(Q,r){ return K*Q/(r*r)*4*Math.PI*r*r; }         /* ∮E·dA (점전하) */
+function gaussB(sep,rs,NTH,NPH){                                 /* 두 자기 극의 플럭스 합 */
+  /* 적분은 법선성분: B·n̂ = K(rs²−s·z)·rs/|P−S|³ — verify_maxwell.py와 같은 식 */
+  let f=0;
+  const dcos=2/NTH, dphi=2*Math.PI/NPH;
+  for(let i=0;i<NTH;i++){
+    const ct=-1+2*(i+0.5)/NTH, st=Math.sqrt(Math.max(0,1-ct*ct));
+    for(let j=0;j<NPH;j++){
+      const ph=2*Math.PI*(j+0.5)/NPH;
+      const x=rs*st*Math.cos(ph), y=rs*st*Math.sin(ph), z=rs*ct;
+      let fz=0;
+      for(const s of [sep/2,-sep/2]){
+        const sg=(s>0)?1:-1;
+        const dx=x, dy=y, dz=z-s;
+        const rr=dx*dx+dy*dy+dz*dz;
+        const dot=rs*rs-s*z;
+        fz+=sg*K*dot*rs/(rr*Math.sqrt(rr));
+      }
+      f+=fz*dcos*dphi;
+    }
+  }
+  return f;
+}
+function faraday(p){ const B=p.b0*Math.sin(p.om*p.tt), dB=p.b0*p.om*Math.cos(p.om*p.tt);
+  return {B, dB, emf:-p.aa*dB}; }        /* EMF = −A·dB/dt — 부호는 패러데이 그대로 */
+function ampere(p){ const C=EPS0*p.ca/p.dd;
+  const I=C*p.kk, Id=EPS0*p.ca*(p.kk/p.dd);
+  return {C, I, Id}; }                                           /* I_d = ε₀A dE/dt = ε₀A·(k/d) */
+
+/* ---------- SVG ---------- */
+function mk(tag,attrs){const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function txt(s,x,y,t,color,size,anchor){
+  const e=mk('text',{x,y,fill:color||'#9aa7b4','font-size':size||12,'text-anchor':anchor||'start'});e.textContent=t;s.appendChild(e);return e;}
+function arrow(s,x1,y1,x2,y2,col,w){
+  s.appendChild(mk('line',{x1,y1,x2,y2,stroke:col,'stroke-width':w||2}));
+  const a=Math.atan2(y2-y1,x2-x1),L=8;
+  s.appendChild(mk('polygon',{points:x2+','+y2+' '+(x2-L*Math.cos(a-0.42))+','+(y2-L*Math.sin(a-0.42))+
+    ' '+(x2-L*Math.cos(a+0.42))+','+(y2-L*Math.sin(a+0.42)),fill:col}));
+}
+
+function draw(){
+  const s=$('fig'); s.innerHTML='';
+  s.setAttribute('viewBox', MODE===2?'0 0 940 400':'0 0 940 330');
+  const CX=470, CY=160;
+  if(MODE===0){
+    const p=P(), rr=p.r*400;
+    s.appendChild(mk('circle',{cx:CX,cy:CY,r:rr,fill:'none',stroke:'#58a6ff','stroke-width':1.6,'stroke-dasharray':'9 6'}));
+    s.appendChild(mk('circle',{cx:CX,cy:CY,r:60,fill:'none',stroke:'#58a6ff','stroke-width':1.2,'stroke-dasharray':'4 5',opacity:0.5}));
+    txt(s,CX+70,CY-58,'r를 줄여도 Φ 같음','#9aa7b4',12);
+    s.appendChild(mk('circle',{cx:CX,cy:CY,r:7,fill:'#f85149'}));
+    txt(s,CX+12,CY-10,'Q = '+fmt(PAR.q,1)+' nC','#f85149',13);
+    for(let i=0;i<8;i++){const a=i*Math.PI/4;
+      arrow(s,CX+rr*Math.cos(a),CY-rr*Math.sin(a),CX+(rr+30)*Math.cos(a),CY-(rr+30)*Math.sin(a),'#3fb950');}
+    txt(s,CX-200,CY+120,'|E| = '+fmt(K*p.q/(p.r*p.r),0)+' V/m  (면 위 균일 · 1/r²)','#3fb950',13);
+  }else if(MODE===1){
+    const p=P(), sp=p.sep*400;
+    s.appendChild(mk('circle',{cx:CX,cy:CY,r:p.rs*400,fill:'none',stroke:'#58a6ff','stroke-width':1.6,'stroke-dasharray':'9 6'}));
+    s.appendChild(mk('circle',{cx:CX,cy:CY-sp/2,r:7,fill:'#f85149'}));
+    s.appendChild(mk('circle',{cx:CX,cy:CY+sp/2,r:7,fill:'#58a6ff'}));
+    txt(s,CX+14,CY-sp/2-4,'N (+q_m)','#f85149',13);
+    txt(s,CX+14,CY+sp/2+14,'S (−q_m)','#58a6ff',13);
+    for(const [o,sc] of [[0,1],[1,0.62],[2,0.34],[3,0.14]]){
+      const w=70+o*38;
+      s.appendChild(mk('path',{d:'M'+CX+' '+(CY-sp/2)+' C '+(CX+w)+' '+(CY-sp/2-70*sc+o*10)+', '+(CX+w)+' '+(CY+sp/2+70*sc-o*10)+', '+CX+' '+(CY+sp/2),
+        fill:'none',stroke:'#3fb950','stroke-width':1.6,opacity:0.85}));
+      s.appendChild(mk('path',{d:'M'+CX+' '+(CY-sp/2)+' C '+(CX-w)+' '+(CY-sp/2-70*sc+o*10)+', '+(CX-w)+' '+(CY+sp/2+70*sc-o*10)+', '+CX+' '+(CY+sp/2),
+        fill:'none',stroke:'#3fb950','stroke-width':1.6,opacity:0.85}));
+    }
+    txt(s,CX,CY+130,'들어간 자기 플럭스 = 나가는 자기 플럭스 → 합 0','#3fb950',13,'middle');
+  }else if(MODE===2){
+    const p=P(), f=faraday(p);
+    const CY2=105, W2=110, H2=55;
+    s.appendChild(mk('rect',{x:CX-W2,y:CY2-H2,width:2*W2,height:2*H2,fill:'none',stroke:'#8b949e','stroke-width':2.2}));
+    const nb=5, blen=12+Math.abs(f.B)/p.b0*42;
+    for(let i=0;i<nb;i++){
+      const x=CX-W2+30+i*(2*W2-60)/(nb-1);
+      if(f.B>=0) arrow(s,x,CY2+blen/2,x,CY2-blen/2,'#f0883e',2.2);
+      else arrow(s,x,CY2-blen/2,x,CY2+blen/2,'#f0883e',2.2);
+    }
+    txt(s,CX,CY2-H2-16,'B(t) = '+fmt(f.B*1000,2)+' mT · '+(f.dB>0?'증가(+dB/dt)':'감소(−dB/dt)'),'#f0883e',13,'middle');
+    /* 유도 E 둘레 화살표 (렌츠) */
+    const dir=f.emf>0;
+    for(const [x,y,dx] of [[CX-W2,CY2,-40],[CX+W2,CY2,40]]){
+      arrow(s,x+(dir?dx:-dx)*0.4,y-H2*0.5,x+(dir?dx:-dx)*0.55,y+H2*0.4,'#3fb950',2.6);
+    }
+    txt(s,CX,CY2+H2+20,'유도 EMF = '+fmt(f.emf*1000,2)+' mV — '+(f.emf>0?'시계 반대':'시계')+' 방향 (렌츠)','#3fb950',13,'middle');
+    /* B(t)·EMF(t) 곡선 — 위가 +, EMF = −A·ω·B₀·cos(ωt) */
+    const gx=80, gy=290, gw=780; const T=2*Math.PI/p.om;
+    s.appendChild(mk('line',{x1:gx,y1:gy,x2:gx+gw,y2:gy,stroke:'#2a323d'}));
+    let dA=''; for(let t=0;t<=T+0.01;t+=0.01){const x=gx+(t%T)/T*gw;
+      dA+=(dA?'L':'M')+x.toFixed(1)+' '+(gy-45*(1+Math.sin(p.om*t))).toFixed(1);}
+    s.appendChild(mk('path',{d:dA,fill:'none',stroke:'#f0883e','stroke-width':1.8}));
+    let dE=''; for(let t=0;t<=T+0.01;t+=0.01){const x=gx+(t%T)/T*gw;
+      dE+=(dE?'L':'M')+x.toFixed(1)+' '+(gy+45*(1+Math.cos(p.om*t))).toFixed(1);}
+    s.appendChild(mk('path',{d:dE,fill:'none',stroke:'#3fb950','stroke-width':1.8}));
+    txt(s,gx-8,gy-75,'B','#f0883e',12,'end'); txt(s,gx-8,gy+80,'EMF','#3fb950',12,'end');
+    const xm=gx+(p.tt%T)/T*gw;
+    s.appendChild(mk('line',{x1:xm,y1:gy-95,x2:xm,y2:gy+95,stroke:'#58a6ff','stroke-dasharray':'4 4'}));
+    s.appendChild(mk('circle',{cx:xm,cy:gy-45*(1+Math.sin(p.om*p.tt)),r:5,fill:'#f0883e'}));
+    s.appendChild(mk('circle',{cx:xm,cy:gy+45*(1+Math.cos(p.om*p.tt)),r:5,fill:'#3fb950'}));
+    txt(s,gx+gw/2,gy+108,'t (한 주기) · B가 0을 지나 가장 빨리 변할 때 |EMF| 최대','#9aa7b4',11,'middle');
+  }else{
+    const p=P(), a=ampere(p);
+    const PX=CX-120;
+    /* 전선 */
+    s.appendChild(mk('line',{x1:PX-260,y1:CY,x2:PX-40,y2:CY,stroke:'#8b949e','stroke-width':3}));
+    arrow(s,PX-160,CY,PX-100,CY,'#3fb950',2.6);
+    txt(s,PX-180,CY-14,'I = C·dV/dt = '+fmt(a.I*1000,2)+' mA','#3fb950',13);
+    /* 판 */
+    s.appendChild(mk('line',{x1:PX,y1:CY-70,x2:PX,y2:CY+70,stroke:'#e6edf3','stroke-width':3.4}));
+    s.appendChild(mk('line',{x1:PX+90,y1:CY-70,x2:PX+90,y2:CY+70,stroke:'#e6edf3','stroke-width':3.4}));
+    for(let i=0;i<4;i++){
+      arrow(s,PX+16,CY-45+i*30,PX+76,CY-45+i*30,'#58a6ff',1.8);
+    }
+    txt(s,PX+45,CY+92,'E ↑ = V/d','#58a6ff',12,'middle');
+    arrow(s,PX+16,CY,PX+76,CY,'#bc8cff',2.6);
+    txt(s,PX+45,CY-92,'I_d = ε₀A·dE/dt','#bc8cff',13,'middle');
+    txt(s,PX+45,CY+118,'= '+fmt(a.Id*1000,2)+' mA — 전선 전류와 이어진다','#bc8cff',12.5,'middle');
+    txt(s,PX-150,CY+150,'C = ε₀A/d = '+fmt(a.C*1e12,1)+' pF · V(t)=kt 가정','#9aa7b4',12.5);
+  }
+}
+
+/* ---------- 검산 ---------- */
+function buildChecks(p){
+  const rows=[]; let all=true;
+  if(MODE===0){
+    const f=fluxE(p.q,p.r);
+    const ok1=Math.abs(f-p.q/EPS0)/Math.abs(p.q/EPS0)<1e-12;
+    rows.push(['Φ = Q/ε₀ (E·4πr² 경로)',fmt(f,2)+' = '+fmt(p.q/EPS0,2)+' V·m',ok1]); all&=ok1;
+    const ok2=fluxE(p.q,p.r)===fluxE(p.q,p.r/2);
+    rows.push(['r 무관 확인: Φ(r) = Φ(r/2)','정확히 일치',ok2]); all&=ok2;
+  }else if(MODE===1){
+    const f=gaussB(p.sep,p.rs,24,48), scale=4*Math.PI*K;
+    const ok1=Math.abs(f)/scale<1e-6;
+    rows.push(['∮B·dA (두 극 수치 적분, 24×48)','Φ = '+f.toExponential(2)+' ≈ 0',ok1]); all&=ok1;
+  }else if(MODE===2){
+    const f=faraday(p);
+    const h=1e-4;
+    const num=-(p.aa*(p.b0*Math.sin(p.om*(p.tt+h))-p.b0*Math.sin(p.om*(p.tt-h)))/(2*h));
+    const ok1=Math.abs(num-f.emf)/Math.max(Math.abs(f.emf),1e-12)<1e-6;
+    rows.push(['EMF 닫힌형 vs 수치 미분 −dΦ/dt','최대 차이 '+(Math.abs(num-f.emf)).toExponential(2),ok1]); all&=ok1;
+    const ok2=(f.emf>0)===(f.dB<0);
+    rows.push(['렌츠 부호: EMF가 dB/dt에 반대','부호 일치',ok2]); all&=ok2;
+  }else{
+    const a=ampere(p);
+    const ok1=Math.abs(a.I-a.Id)<1e-15;
+    rows.push(['I_cond = C·dV/dt vs I_d = ε₀A·dE/dt',fmt(a.I*1000,3)+' = '+fmt(a.Id*1000,3)+' mA',ok1]); all&=ok1;
+    const ok2=Math.abs(a.C-EPS0*p.ca/p.dd)<1e-18;
+    rows.push(['C = ε₀A/d 재계산','일치',ok2]); all&=ok2;
+  }
+  /* 상수 등식: 네 식의 결론 — c */
+  const c=1/Math.sqrt(EPS0*MU0);
+  const okc=Math.abs(c-2.99792458e8)<1e1;
+  rows.push(['파동 속도 c = 1/√(μ₀ε₀)',fmt(c,0)+' m/s (2.998e8)',okc]); all&=okc;
+
+  let h=''; for(const [k,v,ok] of rows)
+    h+='<div class="chk"><span>'+k+'</span><span class="'+(ok?'ok':'bad')+'">'+v+(ok?' ✓ PASS':' ✗ FAIL')+'</span></div>';
+  h+='<div class="chk"><span><b>RESULT</b></span><span class="'+(all?'ok':'bad')+'">'+(all?'ALL PASS':'FAIL')+'</span></div>';
+  $('checks').innerHTML=h;
+}
+
+/* ---------- 렌더 ---------- */
+function setEq(m){
+  MODE=m;
+  for(let i=0;i<4;i++) $('tab'+i).classList.toggle('on',i===m);
+  $('eqName').textContent=EQ[m].name;
+  $('eqInt').innerHTML='적분형&nbsp;&nbsp;'+EQ[m].int;
+  $('eqDiff').innerHTML='미분형&nbsp;&nbsp;'+EQ[m].dif;
+  $('eqNote').innerHTML=EQ[m].note;
+  buildCtl(); render();
+}
+function render(){
+  const p=P();
+  draw();
+  if(MODE===0){
+    $('figTitle').textContent='점전하 + 가우스 구면 — 반지름을 바꿔도 플럭스 불변';
+    const f=fluxE(p.q,p.r);
+    $('vals').innerHTML=
+     '<div class="v hi"><div class="k">Φ = ∮E·dA</div><div class="n">'+fmt(f,1)+'</div><div class="u">V·m</div></div>'+
+     '<div class="v"><div class="k">Q_enc/ε₀</div><div class="n">'+fmt(p.q/EPS0,1)+'</div><div class="u">V·m</div></div>'+
+     '<div class="v"><div class="k">|E| at r</div><div class="n">'+fmt(K*p.q/(p.r*p.r),0)+'</div><div class="u">V/m</div></div>';
+    $('narr').innerHTML='반지름 슬라이더를 움직여보라 — <b>E는 1/r²로 줄지만 면적은 r²로 커져서 플럭스가 정확히 상쇄</b>된다. 그래서 Φ는 안의 전하만 본다.';
+  }else if(MODE===1){
+    $('figTitle').textContent='막대 자석(쌍극자 근사)을 둘러싼 닫힌 면';
+    const f=gaussB(p.sep,p.rs,24,48), scale=4*Math.PI*K;
+    $('vals').innerHTML=
+     '<div class="v hi"><div class="k">∮B·dA (수치 적분, 24×48)</div><div class="n">'+f.toExponential(2)+'</div><div class="u">한 극 단독 '+scale.toExponential(1)+' 대비 ≈0</div></div>';
+    $('narr').innerHTML='자기장선은 N에서 나와 S로 <b>닫힌 고리</b>를 그린다. 아무 닫힌 면을 잡아도 <b>들어온 만큼 나가므로 합이 0</b> — 전기 가우스 법칙과의 결정적 차이다.';
+  }else if(MODE===2){
+    $('figTitle').textContent='면적 A 루프에 B(t)=B₀sin(ωt) — 유도 EMF';
+    const f=faraday(p);
+    $('vals').innerHTML=
+     '<div class="v hi"><div class="k">유도 EMF</div><div class="n">'+fmt(f.emf*1000,3)+'</div><div class="u">mV</div></div>'+
+     '<div class="v"><div class="k">B(t)</div><div class="n">'+fmt(f.B*1000,2)+'</div><div class="u">mT</div></div>'+
+     '<div class="v"><div class="k">dB/dt</div><div class="n">'+fmt(f.dB*1000,2)+'</div><div class="u">mT/s</div></div>'+
+     '<div class="v"><div class="k">Φ_B = B·A</div><div class="n">'+fmt(f.B*p.aa*1000,3)+'</div><div class="u">mWb</div></div>';
+    $('narr').innerHTML='t 슬라이더를 움직여라 — <b>B가 최대인 순간(t=π/2ω)엔 EMF=0</b>, B이 0을 지나 <b>가장 빨리 변할 때 EMF 최대</b>. 유도는 크기가 아니라 <b>변화율</b>에 반응한다.';
+  }else{
+    $('figTitle').textContent='충전 중 콘덴서 — 전류가 끊긴 틈을 변위 전류가 잇는다';
+    const a=ampere(p);
+    $('vals').innerHTML=
+     '<div class="v hi"><div class="k">전선 전류 I = C·dV/dt</div><div class="n">'+fmt(a.I*1000,3)+'</div><div class="u">mA</div></div>'+
+     '<div class="v hi"><div class="k">변위 전류 I_d = ε₀A dE/dt</div><div class="n">'+fmt(a.Id*1000,3)+'</div><div class="u">mA</div></div>'+
+     '<div class="v"><div class="k">정전용량 C = ε₀A/d</div><div class="n">'+fmt(a.C*1e12,1)+'</div><div class="u">pF</div></div>';
+    $('narr').innerHTML='판 사이엔 전하가 흐르지 않지만 <b>E가 변하는 순간마다 I_d가 흐른 것처럼</b> 자기장을 만든다 — 크기가 전선 전류와 정확히 같아 앙페르 법칙의 우변이 어디서나 연속된다.';
+  }
+  buildChecks(p);
+}
+setEq(0);
+</script>
+</body>
+</html>
